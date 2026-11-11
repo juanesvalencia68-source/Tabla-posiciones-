@@ -4,17 +4,18 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Crown, Sparkles, Volume2, VolumeX, Settings, Trophy, Maximize, Minimize } from 'lucide-react';
+import { Crown, Volume2, VolumeX, Settings, Trophy, Maximize, Minimize, Radio, Wifi, WifiOff } from 'lucide-react';
 import { Agent, Deposit, DepositMethod, RankingView, Top1OvertakeEvent } from './types';
 import { 
-  loadAgents, 
-  saveAgents, 
-  loadDeposits, 
-  saveDeposits, 
-  resetDailyDeposits, 
-  resetTotalDeposits,
-  resetAllData 
-} from './utils/storage';
+  fetchState,
+  subscribeToLiveUpdates,
+  submitDepositApi,
+  resetDailyApi,
+  resetTotalApi,
+  createAgentApi,
+  updateAgentApi,
+  deleteAgentApi
+} from './utils/api';
 import { soundEngine } from './utils/soundEffects';
 import { SimpleLeaderboardTable } from './components/SimpleLeaderboardTable';
 import { AdminPanel } from './components/AdminPanel';
@@ -32,6 +33,7 @@ export default function App() {
   const [confirmResetType, setConfirmResetType] = useState<ResetType>(null);
   const [isMuted, setIsMuted] = useState(soundEngine.getIsMuted());
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
 
   // Sync fullscreen state
   useEffect(() => {
@@ -54,10 +56,52 @@ export default function App() {
     }
   };
 
-  // Load initial data
+  // 1. Initial State Load & Multi-Device Real-Time Sync Setup
   useEffect(() => {
-    setAgents(loadAgents());
-    setDeposits(loadDeposits());
+    // Load initial shared state from server
+    fetchState().then((data) => {
+      if (data.agents && data.agents.length > 0) {
+        setAgents(data.agents);
+      }
+      if (data.deposits) {
+        setDeposits(data.deposits);
+      }
+    });
+
+    // Subscribe to live SSE updates (when ANY device posts a deposit, resets, or updates agents)
+    const unsubscribe = subscribeToLiveUpdates({
+      onDepositReceived: (deposit, updatedAgents, overtake) => {
+        setAgents(updatedAgents);
+        setDeposits((prev) => [deposit, ...prev]);
+
+        // Play coin money sound on all screens (TV, PCs)
+        soundEngine.playCoinMoneySound();
+
+        // Show notification toast
+        setActiveNotification({
+          id: String(Date.now()),
+          agentName: deposit.agentName,
+          amount: deposit.amount,
+          timestamp: Date.now(),
+        });
+
+        // Trigger celebration if Top 1 was overtaken
+        if (overtake) {
+          soundEngine.playTop1Fanfare();
+          setCelebrationEvent(overtake);
+        }
+      },
+      onAgentsUpdated: (updatedAgents) => {
+        setAgents(updatedAgents);
+      },
+      onConnectionStatusChange: (status) => {
+        setIsConnected(status);
+      },
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   // Sorted agents based on active view (daily vs total)
@@ -72,78 +116,34 @@ export default function App() {
 
   const top1Agent = sortedAgents[0];
 
-  // Handle deposit registration
+  // Deposit registration via shared Server API
   const handleConfirmDeposit = useCallback(
-    (
+    async (
       agentId: string,
       amount: number,
       method: DepositMethod = 'Efectivo',
       reference?: string
     ) => {
-      // 1. Play authentic coin sound
-      soundEngine.playCoinMoneySound();
-
-      // Check current leader before applying deposit
-      const previousLeader = [...agents].sort((a, b) => {
-        return sortBy === 'daily' ? b.dailyTotal - a.dailyTotal : b.grandTotal - a.grandTotal;
-      })[0];
-
-      const agent = agents.find((a) => a.id === agentId);
-      if (!agent) return;
-
-      const now = new Date().toISOString();
-      const updatedAgent: Agent = {
-        ...agent,
-        dailyTotal: agent.dailyTotal + amount,
-        grandTotal: agent.grandTotal + amount,
-        dailyDepositCount: agent.dailyDepositCount + 1,
-        totalDepositCount: agent.totalDepositCount + 1,
-        lastDepositAt: now,
-      };
-
-      const updatedAgents = agents.map((a) => (a.id === agentId ? updatedAgent : a));
-      saveAgents(updatedAgents);
-      setAgents(updatedAgents);
-
-      // Save deposit record
-      const newDeposit: Deposit = {
-        id: `dep-${Date.now()}`,
-        agentId: agent.id,
-        agentName: agent.name,
-        amount,
-        timestamp: now,
-        method,
-        reference,
-      };
-      const updatedDeposits = [newDeposit, ...deposits];
-      saveDeposits(updatedDeposits);
-      setDeposits(updatedDeposits);
-
-      // 2. Trigger notification with agent name and amount
-      setActiveNotification({
-        id: String(Date.now()),
-        agentName: agent.name,
-        amount: amount,
-        timestamp: Date.now(),
-      });
-
-      // 3. Check if this agent reached or took Top 1
-      const newLeader = [...updatedAgents].sort((a, b) => {
-        return sortBy === 'daily' ? b.dailyTotal - a.dailyTotal : b.grandTotal - a.grandTotal;
-      })[0];
-
-      if (newLeader.id === updatedAgent.id && previousLeader?.id !== updatedAgent.id) {
-        soundEngine.playTop1Fanfare();
-        setCelebrationEvent({
-          agent: updatedAgent,
-          previousLeaderName: previousLeader?.name,
-          newAmount: sortBy === 'daily' ? updatedAgent.dailyTotal : updatedAgent.grandTotal,
-          view: sortBy,
-          timestamp: Date.now(),
+      try {
+        const result = await submitDepositApi({
+          agentId,
+          amount,
+          method,
+          reference,
         });
+
+        // Update local state immediately if server responds
+        if (result.agents) {
+          setAgents(result.agents);
+        }
+        if (result.deposit) {
+          setDeposits((prev) => [result.deposit, ...prev]);
+        }
+      } catch (err) {
+        console.error('Error submitting deposit:', err);
       }
     },
-    [agents, deposits, sortBy]
+    []
   );
 
   // Quick simulation function to test the coin sound, notification, and celebration
@@ -165,82 +165,112 @@ export default function App() {
     soundEngine.setMuted(muted);
   };
 
-  const handleConfirmReset = (type: 'daily' | 'total') => {
-    if (type === 'daily') {
-      const updated = resetDailyDeposits();
-      setAgents(updated);
-      soundEngine.playCoinMoneySound();
-      setActiveNotification({
-        id: String(Date.now()),
-        agentName: 'Reinicio Diario a $0',
-        amount: 0,
-        timestamp: Date.now(),
-      });
-    } else if (type === 'total') {
-      const updated = resetTotalDeposits();
-      setAgents(updated);
-      setDeposits([]);
-      soundEngine.playCoinMoneySound();
-      setActiveNotification({
-        id: String(Date.now()),
-        agentName: 'Reinicio Completo de Totales a $0',
-        amount: 0,
-        timestamp: Date.now(),
-      });
+  const handleConfirmReset = async (type: 'daily' | 'total') => {
+    try {
+      if (type === 'daily') {
+        const updated = await resetDailyApi();
+        setAgents(updated);
+        soundEngine.playCoinMoneySound();
+        setActiveNotification({
+          id: String(Date.now()),
+          agentName: 'Reinicio Diario a $0',
+          amount: 0,
+          timestamp: Date.now(),
+        });
+      } else if (type === 'total') {
+        const updated = await resetTotalApi();
+        setAgents(updated);
+        setDeposits([]);
+        soundEngine.playCoinMoneySound();
+        setActiveNotification({
+          id: String(Date.now()),
+          agentName: 'Reinicio Completo de Totales a $0',
+          amount: 0,
+          timestamp: Date.now(),
+        });
+      }
+    } catch (err) {
+      console.error('Error resetting:', err);
     }
   };
 
-  const handleRestoreDemoData = () => {
-    const restored = resetAllData();
-    setAgents(restored.agents);
-    setDeposits(restored.deposits);
-    soundEngine.playCoinMoneySound();
-    setActiveNotification({
-      id: String(Date.now()),
-      agentName: 'Datos de Ejemplo Restaurados',
-      amount: 0,
-      timestamp: Date.now(),
-    });
+  const handleRestoreDemoData = async () => {
+    try {
+      const res = await fetch('/api/reset-all', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setAgents(data.agents);
+        setDeposits(data.deposits);
+        soundEngine.playCoinMoneySound();
+        setActiveNotification({
+          id: String(Date.now()),
+          agentName: 'Datos de Ejemplo Restaurados',
+          amount: 0,
+          timestamp: Date.now(),
+        });
+      }
+    } catch (err) {
+      console.error('Error restoring demo data:', err);
+    }
   };
 
-  // Admin Panel CRUD Handlers
-  const handleAddAgent = (newAgent: Agent) => {
-    const updated = [...agents, newAgent];
-    saveAgents(updated);
-    setAgents(updated);
-    soundEngine.playCoinMoneySound();
-    setActiveNotification({
-      id: String(Date.now()),
-      agentName: `${newAgent.name} (Nuevo Agente Creado)`,
-      amount: newAgent.dailyTotal,
-      timestamp: Date.now(),
-    });
+  // Admin Panel CRUD Handlers synchronized via Server API
+  const handleAddAgent = async (newAgent: Agent) => {
+    try {
+      const updated = await createAgentApi({
+        name: newAgent.name,
+        code: newAgent.code,
+        branch: newAgent.branch,
+        color: newAgent.color,
+      });
+      setAgents(updated);
+      soundEngine.playCoinMoneySound();
+      setActiveNotification({
+        id: String(Date.now()),
+        agentName: `${newAgent.name} (Nuevo Agente)`,
+        amount: 0,
+        timestamp: Date.now(),
+      });
+    } catch (err) {
+      console.error('Error adding agent:', err);
+    }
   };
 
-  const handleUpdateAgent = (updatedAgent: Agent) => {
-    const updated = agents.map((a) => (a.id === updatedAgent.id ? updatedAgent : a));
-    saveAgents(updated);
-    setAgents(updated);
-    soundEngine.playCoinMoneySound();
-    setActiveNotification({
-      id: String(Date.now()),
-      agentName: `${updatedAgent.name} (Datos Actualizados)`,
-      amount: updatedAgent.dailyTotal,
-      timestamp: Date.now(),
-    });
+  const handleUpdateAgent = async (updatedAgent: Agent) => {
+    try {
+      const updated = await updateAgentApi(updatedAgent.id, {
+        name: updatedAgent.name,
+        code: updatedAgent.code,
+        branch: updatedAgent.branch,
+        color: updatedAgent.color,
+      });
+      setAgents(updated);
+      soundEngine.playCoinMoneySound();
+      setActiveNotification({
+        id: String(Date.now()),
+        agentName: `${updatedAgent.name} (Actualizado)`,
+        amount: 0,
+        timestamp: Date.now(),
+      });
+    } catch (err) {
+      console.error('Error updating agent:', err);
+    }
   };
 
-  const handleDeleteAgent = (agentId: string) => {
-    const target = agents.find((a) => a.id === agentId);
-    const updated = agents.filter((a) => a.id !== agentId);
-    saveAgents(updated);
-    setAgents(updated);
-    setActiveNotification({
-      id: String(Date.now()),
-      agentName: `${target?.name || 'Agente'} Eliminado`,
-      amount: 0,
-      timestamp: Date.now(),
-    });
+  const handleDeleteAgent = async (agentId: string) => {
+    try {
+      const target = agents.find((a) => a.id === agentId);
+      const updated = await deleteAgentApi(agentId);
+      setAgents(updated);
+      setActiveNotification({
+        id: String(Date.now()),
+        agentName: `${target?.name || 'Agente'} Eliminado`,
+        amount: 0,
+        timestamp: Date.now(),
+      });
+    } catch (err) {
+      console.error('Error deleting agent:', err);
+    }
   };
 
   return (
@@ -260,10 +290,24 @@ export default function App() {
               <Crown className="w-5 h-5 text-slate-950 fill-slate-950" />
             </div>
             <div>
-              <h1 className="text-base font-extrabold text-white tracking-tight leading-none">
-                Tabla de Posiciones
-              </h1>
-              <p className="text-[11px] text-slate-400 mt-0.5">Agentes de Depósitos</p>
+              <div className="flex items-center gap-2">
+                <h1 className="text-base font-extrabold text-white tracking-tight leading-none">
+                  Tabla de Posiciones
+                </h1>
+                {/* Live Sync Badge */}
+                <span
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase ${
+                    isConnected
+                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                      : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+                  }`}
+                  title={isConnected ? 'Sincronizado en tiempo real con todas las pantallas' : 'Reconectando con el servidor...'}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
+                  {isConnected ? 'En Vivo' : 'Offline'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">Agentes de Depósitos · Área de Retención</p>
             </div>
           </div>
 
@@ -362,7 +406,9 @@ export default function App() {
       {/* Footer */}
       <footer className="border-t border-slate-800/80 py-4 mt-auto bg-slate-950 text-center text-xs text-slate-500">
         <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p>Tabla de Posiciones de Agentes · Sonido de monedas al registrar depósitos</p>
+          <p>
+            Tabla de Posiciones de Agentes · Sincronización en tiempo real entre múltiples pantallas y Smart TVs
+          </p>
           <button
             onClick={handleRestoreDemoData}
             className="text-slate-400 hover:text-amber-400 underline underline-offset-2 transition-colors cursor-pointer"

@@ -1,0 +1,104 @@
+{
+  "agents": [
+    {
+      "id": "ag-1",
+      "name": "Carlos Mendoza",
+      "code": "AG-01",
+      "branch": "Retención",
+      "color": "#3B82F6",
+      "avatarSeed": "Carlos",
+      "dailyTotal": 1850000,
+      "grandTotal": 14250000,
+      "dailyDepositCount": 6,
+      "totalDepositCount": 42,
+      "lastDepositAt": "2026-11-11T15:18:09.514Z"
+    },
+    {
+      "id": "ag-2",
+      "name": "Valentina Restrepo",
+      "code": "AG-02",
+      "branch": "Retención",
+      "color": "#10B981",
+      "avatarSeed": "Valentina",
+      "dailyTotal": 2150000,
+      "grandTotal": 16800000,
+      "dailyDepositCount": 8,
+      "totalDepositCount": 48,
+      "lastDepositAt": "2026-11-11T15:31:09.515Z"
+    },
+    {
+      "id": "ag-3",
+      "name": "Mateo Gómez",
+      "code": "AG-03",
+      "branch": "Retención",
+      "color": "#8B5CF6",
+      "avatarSeed": "Mateo",
+      "dailyTotal": 1400000,
+      "grandTotal": 11900000,
+      "dailyDepositCount": 5,
+      "totalDepositCount": 36,
+      "lastDepositAt": "2026-11-11T14:51:09.515Z"
+    },
+    {
+      "id": "ag-4",
+      "name": "Daniela Herrera",
+      "code": "AG-04",
+      "branch": "Retención",
+      "color": "#F59E0B",
+      "avatarSeed": "Daniela",
+      "dailyTotal": 950000,
+      "grandTotal": 9650000,
+      "dailyDepositCount": 3,
+      "totalDepositCount": 29,
+      "lastDepositAt": "2026-11-11T14:11:09.515Z"
+    },
+    {
+      "id": "ag-5",
+      "name": "Andrés Felipe Silva",
+      "code": "AG-05",
+      "branch": "Retención",
+      "color": "#EC4899",
+      "avatarSeed": "Andres",
+      "dailyTotal": 650000,
+      "grandTotal": 8100000,
+      "dailyDepositCount": 2,
+      "totalDepositCount": 24,
+      "lastDepositAt": "2026-11-11T13:26:09.515Z"
+    },
+    {
+      "id": "ag-6",
+      "name": "Camila Torres",
+      "code": "AG-06",
+      "branch": "Retención",
+      "color": "#06B6D4",
+      "avatarSeed": "Camila",
+      "dailyTotal": 400000,
+      "grandTotal": 6900000,
+      "dailyDepositCount": 2,
+      "totalDepositCount": 19,
+      "lastDepositAt": "2026-11-11T12:06:09.515Z"
+    }
+  ],
+  "deposits": [
+    {
+      "id": "dep-1",
+      "agentId": "ag-2",
+      "agentName": "Valentina Restrepo",
+      "amount": 500000,
+      "timestamp": "2026-11-11T15:31:09.515Z",
+      "method": "Transferencia",
+      "reference": "TR-99824",
+      "notes": "Depósito cliente corporativo"
+    },
+    {
+      "id": "dep-2",
+      "agentId": "ag-1",
+      "agentName": "Carlos Mendoza",
+      "amount": 350000,
+      "timestamp": "2026-11-11T15:18:09.515Z",
+      "method": "Efectivo",
+      "reference": "EF-44120",
+      "notes": "Recaudo sucursal centro"
+    }
+  ]
+}
