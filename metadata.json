@@ -1,0 +1,6 @@
+{
+  "name": "Tabla de Posiciones - Agentes de Depósitos",
+  "description": "Leaderboard interactivo para agentes de depósitos con vistas diario y total, efectos de sonido en depósitos, corona para el Top 1 y animación de festejo.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
