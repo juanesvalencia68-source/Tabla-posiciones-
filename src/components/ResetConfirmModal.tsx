@@ -23,7 +23,7 @@ export const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({
     : 'Esta acción reiniciará TODOS los depósitos (tanto diarios como totales acumulados) a $0 para todos los agentes y vaciará el historial.';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90">
       <div className="relative w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-5 overflow-hidden">
         {/* Header Icon */}
         <div className="flex items-center gap-3">

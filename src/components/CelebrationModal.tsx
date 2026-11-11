@@ -14,43 +14,45 @@ export const CelebrationModal: React.FC<CelebrationModalProps> = ({ event, onClo
   useEffect(() => {
     if (!event) return;
 
-    // Trigger explosive celebratory confetti from both bottom corners
-    const end = Date.now() + 2500;
-    const colors = ['#F59E0B', '#FBBF24', '#FDE68A', '#3B82F6', '#10B981', '#EC4899'];
+    // Optimized confetti for TV and low-spec processors:
+    // Single light burst instead of continuous requestAnimationFrame loop
+    try {
+      const colors = ['#F59E0B', '#FBBF24', '#3B82F6', '#10B981'];
 
-    const frame = () => {
+      // Left corner burst (15 particles)
       confetti({
-        particleCount: 5,
+        particleCount: 15,
         angle: 60,
-        spread: 65,
-        origin: { x: 0, y: 0.8 },
+        spread: 55,
+        origin: { x: 0.1, y: 0.7 },
         colors: colors,
+        disableForReducedMotion: true,
       });
+
+      // Right corner burst (15 particles)
       confetti({
-        particleCount: 5,
+        particleCount: 15,
         angle: 120,
-        spread: 65,
-        origin: { x: 1, y: 0.8 },
+        spread: 55,
+        origin: { x: 0.9, y: 0.7 },
         colors: colors,
+        disableForReducedMotion: true,
       });
 
-      if (Date.now() < end) {
-        requestAnimationFrame(frame);
-      }
-    };
-    frame();
-
-    // Secondary burst of golden stars in the center
-    setTimeout(() => {
-      confetti({
-        particleCount: 60,
-        spread: 100,
-        origin: { y: 0.4 },
-        colors: ['#F59E0B', '#FBBF24', '#EAB308'],
-        shapes: ['star'],
-        scalar: 1.2,
-      });
-    }, 400);
+      // Center golden star burst (15 particles)
+      setTimeout(() => {
+        confetti({
+          particleCount: 15,
+          spread: 80,
+          origin: { y: 0.4 },
+          colors: ['#F59E0B', '#FBBF24'],
+          shapes: ['star'],
+          disableForReducedMotion: true,
+        });
+      }, 250);
+    } catch {
+      // Fallback if canvas is unsupported
+    }
 
     // Auto-dismiss after exactly 6 seconds
     const timer = setTimeout(() => {
@@ -67,42 +69,29 @@ export const CelebrationModal: React.FC<CelebrationModalProps> = ({ event, onClo
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90">
         <motion.div
-          initial={{ scale: 0.8, opacity: 0, y: 20 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.85, opacity: 0, y: -20 }}
-          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-          className="relative w-full max-w-lg p-6 sm:p-8 bg-gradient-to-b from-slate-900 to-slate-950 border-2 border-amber-500/70 rounded-2xl shadow-2xl shadow-amber-500/20 text-center overflow-hidden"
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.95, opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="relative w-full max-w-lg p-6 sm:p-8 bg-slate-900 border-2 border-amber-500 rounded-2xl text-center overflow-hidden"
         >
-          {/* Background Ambient Glow */}
-          <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-64 h-64 bg-amber-500/20 rounded-full blur-3xl pointer-events-none" />
-
           {/* Close button */}
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+            className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
             aria-label="Cerrar festejo"
           >
             <X className="w-5 h-5" />
           </button>
 
           {/* Animated Crown Badge */}
-          <motion.div
-            initial={{ y: -30, rotate: -15, scale: 0 }}
-            animate={{ y: 0, rotate: 0, scale: 1 }}
-            transition={{ type: 'spring', delay: 0.15, stiffness: 260 }}
-            className="inline-flex items-center justify-center relative mb-3"
-          >
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-amber-600 via-amber-400 to-yellow-300 p-0.5 shadow-lg shadow-amber-500/30">
-              <div className="w-full h-full bg-slate-950 rounded-2xl flex items-center justify-center">
-                <Crown className="w-10 h-10 text-amber-400 animate-bounce" />
-              </div>
+          <div className="inline-flex items-center justify-center relative mb-3">
+            <div className="w-18 h-18 rounded-2xl bg-amber-500 flex items-center justify-center shadow-md">
+              <Crown className="w-10 h-10 text-slate-950 fill-slate-950" />
             </div>
-            <span className="absolute -top-1 -right-1 flex h-4 w-4">
-              <Sparkles className="w-5 h-5 text-amber-300 animate-spin" />
-            </span>
-          </motion.div>
+          </div>
 
           {/* Title */}
           <div className="space-y-1">
@@ -112,20 +101,15 @@ export const CelebrationModal: React.FC<CelebrationModalProps> = ({ event, onClo
             <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
               ¡NUEVO LÍDER EN EL TOP 1! 👑
             </h2>
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-slate-300">
               Ha tomado el primer lugar en el <strong className="text-amber-300">{viewLabel}</strong>
             </p>
           </div>
 
           {/* Agent Showcase Card */}
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.25 }}
-            className="mt-6 p-4 rounded-xl bg-slate-800/80 border border-amber-500/30 flex items-center gap-4 text-left"
-          >
+          <div className="mt-6 p-4 rounded-xl bg-slate-950 border border-amber-500/50 flex items-center gap-4 text-left">
             <div
-              className="w-14 h-14 rounded-xl flex items-center justify-center font-bold text-xl text-white shadow-md shrink-0 border border-white/20"
+              className="w-14 h-14 rounded-xl flex items-center justify-center font-bold text-xl text-white shrink-0 border border-white/20"
               style={{ backgroundColor: agent.color }}
             >
               {agent.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
@@ -149,7 +133,7 @@ export const CelebrationModal: React.FC<CelebrationModalProps> = ({ event, onClo
                 {formatCurrency(newAmount)}
               </span>
             </div>
-          </motion.div>
+          </div>
 
           {/* Context note if overtaking another agent */}
           {previousLeaderName && previousLeaderName !== agent.name && (
@@ -165,12 +149,12 @@ export const CelebrationModal: React.FC<CelebrationModalProps> = ({ event, onClo
           <div className="mt-6 flex flex-col items-center gap-2">
             <button
               onClick={onClose}
-              className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-sm rounded-xl transition-all shadow-lg shadow-amber-500/20 active:scale-95 cursor-pointer"
+              className="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm rounded-xl transition-colors cursor-pointer"
             >
               ¡Felicitaciones! Continuar
             </button>
 
-            <span className="text-[11px] text-slate-400">
+            <span className="text-xs text-slate-400">
               Se cerrará automáticamente en 6 segundos
             </span>
 

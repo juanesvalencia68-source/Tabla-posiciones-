@@ -63,37 +63,34 @@ class SoundEngine {
       masterGain.gain.setValueAtTime(this.volume * 0.85, now);
       masterGain.connect(ctx.destination);
 
-      // Sequence of cascading coins falling and clinking together
+      // Streamlined 3-coin cascade optimized for low-power TV audio processors
       const coinDrops = [
-        { time: 0.000, freq: 3950, dur: 0.22, gain: 0.70 },
-        { time: 0.048, freq: 4720, dur: 0.25, gain: 0.75 },
-        { time: 0.098, freq: 3520, dur: 0.22, gain: 0.65 },
-        { time: 0.155, freq: 5280, dur: 0.28, gain: 0.80 },
-        { time: 0.215, freq: 4186, dur: 0.45, gain: 0.75 },
-        { time: 0.265, freq: 6280, dur: 0.35, gain: 0.55 },
+        { time: 0.000, freq: 4186, dur: 0.20, gain: 0.75 },
+        { time: 0.055, freq: 4978, dur: 0.24, gain: 0.80 },
+        { time: 0.120, freq: 5587, dur: 0.36, gain: 0.70 },
       ];
 
       coinDrops.forEach(({ time, freq, dur, gain: coinGain }) => {
         const start = now + time;
 
-        // 1. Sharp metallic impact transient (coin edge click)
+        // 1. Sharp coin impact
         const clickOsc = ctx.createOscillator();
         const clickGain = ctx.createGain();
         clickOsc.type = 'triangle';
-        clickOsc.frequency.setValueAtTime(freq * 1.35, start);
-        clickOsc.frequency.exponentialRampToValueAtTime(freq * 0.75, start + 0.025);
+        clickOsc.frequency.setValueAtTime(freq * 1.3, start);
+        clickOsc.frequency.exponentialRampToValueAtTime(freq * 0.8, start + 0.02);
 
         clickGain.gain.setValueAtTime(0, now);
         clickGain.gain.setValueAtTime(coinGain * 0.5, start);
-        clickGain.gain.exponentialRampToValueAtTime(0.001, start + 0.03);
+        clickGain.gain.exponentialRampToValueAtTime(0.001, start + 0.025);
 
         clickOsc.connect(clickGain);
         clickGain.connect(masterGain);
 
         clickOsc.start(start);
-        clickOsc.stop(start + 0.035);
+        clickOsc.stop(start + 0.03);
 
-        // 2. Primary coin resonance (metallic ring)
+        // 2. Pure metallic coin chime
         const osc = ctx.createOscillator();
         const g = ctx.createGain();
         osc.type = 'sine';
@@ -108,22 +105,6 @@ class SoundEngine {
 
         osc.start(start);
         osc.stop(start + dur + 0.01);
-
-        // 3. Higher harmonic chime (silver overtone ~1.5x)
-        const harmOsc = ctx.createOscillator();
-        const harmGain = ctx.createGain();
-        harmOsc.type = 'sine';
-        harmOsc.frequency.setValueAtTime(freq * 1.503, start);
-
-        harmGain.gain.setValueAtTime(0, now);
-        harmGain.gain.setValueAtTime(coinGain * 0.5, start);
-        harmGain.gain.exponentialRampToValueAtTime(0.0001, start + dur * 0.8);
-
-        harmOsc.connect(harmGain);
-        harmGain.connect(masterGain);
-
-        harmOsc.start(start);
-        harmOsc.stop(start + dur);
       });
     } catch (e) {
       console.warn('Coin audio playback failed:', e);

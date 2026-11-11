@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Crown, Sparkles, Volume2, VolumeX, Settings, Trophy, LayoutDashboard } from 'lucide-react';
+import { Crown, Sparkles, Volume2, VolumeX, Settings, Trophy, Maximize, Minimize } from 'lucide-react';
 import { Agent, Deposit, DepositMethod, RankingView, Top1OvertakeEvent } from './types';
 import { 
   loadAgents, 
@@ -31,6 +31,28 @@ export default function App() {
   const [celebrationEvent, setCelebrationEvent] = useState<Top1OvertakeEvent | null>(null);
   const [confirmResetType, setConfirmResetType] = useState<ResetType>(null);
   const [isMuted, setIsMuted] = useState(soundEngine.getIsMuted());
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Sync fullscreen state
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    try {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    } catch {
+      // Ignore if unsupported in iframe sandbox
+    }
+  };
 
   // Load initial data
   useEffect(() => {
@@ -230,11 +252,11 @@ export default function App() {
       />
 
       {/* Top Header */}
-      <header className="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-md border-b border-slate-800">
+      <header className="sticky top-0 z-40 bg-slate-950 border-b border-slate-800">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
           {/* Zone 1: Brand Wordmark */}
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-amber-500 to-yellow-400 p-0.5 flex items-center justify-center shadow-md shadow-amber-500/20">
+            <div className="w-8 h-8 rounded-lg bg-amber-500 p-0.5 flex items-center justify-center shadow-md">
               <Crown className="w-5 h-5 text-slate-950 fill-slate-950" />
             </div>
             <div>
@@ -249,7 +271,7 @@ export default function App() {
           <div className="flex items-center p-1 bg-slate-900 border border-slate-800 rounded-xl">
             <button
               onClick={() => setCurrentView('leaderboard')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                 currentView === 'leaderboard'
                   ? 'bg-amber-500 text-slate-950 shadow-sm'
                   : 'text-slate-400 hover:text-white'
@@ -261,7 +283,7 @@ export default function App() {
 
             <button
               onClick={() => setCurrentView('admin')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                 currentView === 'admin'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-white'
@@ -272,17 +294,28 @@ export default function App() {
             </button>
           </div>
 
-          {/* Zone 3: Leader Crown Indicator & Audio Toggle */}
+          {/* Zone 3: Leader Crown Indicator & Controls */}
           <div className="flex items-center gap-2">
             {top1Agent && currentView === 'leaderboard' && (
               <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/30 rounded-xl">
-                <Crown className="w-4 h-4 text-amber-400 fill-amber-400 animate-pulse" />
+                <Crown className="w-4 h-4 text-amber-400 fill-amber-400" />
                 <span className="text-xs text-slate-300">
                   Top 1: <strong className="text-amber-300 font-bold">{top1Agent.name}</strong>
                 </span>
               </div>
             )}
 
+            {/* TV Fullscreen Button */}
+            <button
+              onClick={toggleFullscreen}
+              className="p-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              title={isFullscreen ? 'Salir de pantalla completa' : 'Modo Pantalla Completa (Ideal para TV)'}
+              aria-label="Pantalla Completa"
+            >
+              {isFullscreen ? <Minimize className="w-4 h-4 text-amber-400" /> : <Maximize className="w-4 h-4 text-slate-300" />}
+            </button>
+
+            {/* Audio Toggle */}
             <button
               onClick={() => handleToggleMute(!isMuted)}
               className={`p-2 rounded-xl border transition-colors cursor-pointer ${
@@ -291,6 +324,7 @@ export default function App() {
                   : 'bg-slate-900 border-slate-700 text-emerald-400'
               }`}
               title={isMuted ? 'Activar sonido de monedas' : 'Silenciar sonido'}
+              aria-label="Alternar sonido"
             >
               {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
             </button>

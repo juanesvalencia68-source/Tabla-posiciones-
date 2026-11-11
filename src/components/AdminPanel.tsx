@@ -494,7 +494,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {/* Modal / Form for Add / Edit Agent */}
       {(isCreating || editingAgent) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90">
           <div className="relative w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-5 overflow-hidden">
             <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -634,7 +634,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {/* Delete Confirmation Modal */}
       {deletingAgent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90">
           <div className="relative w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-5 overflow-hidden">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 shrink-0">
