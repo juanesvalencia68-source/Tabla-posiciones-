@@ -1,0 +1,258 @@
+{
+  "entities": {
+    "Agent": {
+      "title": "Agent",
+      "description": "Agente participante en la tabla de posiciones de Retención o Conversión (sin PII).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "branch": {
+          "type": "string",
+          "enum": ["Retención", "Conversión"],
+          "maxLength": 20
+        },
+        "color": {
+          "type": "string",
+          "maxLength": 20,
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "avatarSeed": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "dailyTotal": {
+          "type": "number"
+        },
+        "grandTotal": {
+          "type": "number"
+        },
+        "dailyDepositCount": {
+          "type": "number"
+        },
+        "totalDepositCount": {
+          "type": "number"
+        },
+        "isPublic": {
+          "type": "boolean"
+        },
+        "lastDepositAt": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "code",
+        "branch",
+        "color",
+        "avatarSeed",
+        "dailyTotal",
+        "grandTotal",
+        "dailyDepositCount",
+        "totalDepositCount",
+        "isPublic",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Deposit": {
+      "title": "Deposit",
+      "description": "Registro inmutable de depósito o ajuste negativo asociado a un agente.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "agentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "agentName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "branch": {
+          "type": "string",
+          "enum": ["Retención", "Conversión"],
+          "maxLength": 20
+        },
+        "amount": {
+          "type": "number"
+        },
+        "method": {
+          "type": "string",
+          "enum": ["Efectivo", "Transferencia", "Tarjeta", "Cheque", "Otro"],
+          "maxLength": 20
+        },
+        "reference": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "createdByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "agentId",
+        "agentName",
+        "branch",
+        "amount",
+        "method",
+        "createdByUid",
+        "createdAt"
+      ]
+    },
+    "BoardEvent": {
+      "title": "BoardEvent",
+      "description": "Último evento público para disparar sonido de monedas, toast y celebración Top 1 en tiempo real en Smart TVs.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["deposit", "reset_daily", "reset_total", "agents_updated"],
+          "maxLength": 20
+        },
+        "branch": {
+          "type": "string",
+          "enum": ["Retención", "Conversión", "Todas"],
+          "maxLength": 20
+        },
+        "agentId": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "agentName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "amount": {
+          "type": "number"
+        },
+        "overtake": {
+          "type": "boolean"
+        },
+        "previousLeaderName": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "view": {
+          "type": "string",
+          "enum": ["daily", "total"],
+          "maxLength": 10
+        },
+        "eventSeq": {
+          "type": "number"
+        },
+        "isPublic": {
+          "type": "boolean"
+        },
+        "createdByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "branch",
+        "agentName",
+        "amount",
+        "overtake",
+        "eventSeq",
+        "isPublic",
+        "createdByUid",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ConnectionCheck": {
+      "title": "ConnectionCheck",
+      "description": "Documento de prueba de conectividad con Firestore al arrancar.",
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "firestore": {
+    "/agents/{agentId}": {
+      "schema": { "$ref": "#/entities/Agent" },
+      "description": "Lista pública de agentes y sus acumulados diarios y totales por área."
+    },
+    "/deposits/{depositId}": {
+      "schema": { "$ref": "#/entities/Deposit" },
+      "description": "Historial de depósitos y ajustes negativos registrados desde el panel admin."
+    },
+    "/board_events/{eventId}": {
+      "schema": { "$ref": "#/entities/BoardEvent" },
+      "description": "Evento público más reciente (/board_events/latest) para notificaciones en Smart TVs."
+    },
+    "/test/connection": {
+      "schema": { "$ref": "#/entities/ConnectionCheck" },
+      "description": "Ruta de comprobación inicial de conexión con el servidor Firestore."
+    }
+  }
+}

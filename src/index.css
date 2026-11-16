@@ -5,17 +5,106 @@
   --font-mono: 'JetBrains Mono', monospace;
 }
 
-/* TV & Low-performance device optimizations */
-html {
-  text-rendering: optimizeLegibility;
+/* Smart TV Extreme Performance Optimizations */
+html, body {
+  text-rendering: optimizeSpeed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
-/* Hardware accelerated transitions without expensive multi-layer box-shadows */
-.glow-top1 {
-  border-color: rgba(245, 158, 11, 0.9) !important;
-  outline: 2px solid rgba(245, 158, 11, 0.4);
+/* Eliminate software blur rasterizations from box-shadows on TVs */
+*, ::before, ::after {
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+/* TV performance: Enforce strict layout containment on table rows */
+.tv-table-row {
+  contain: layout style paint;
+}
+
+/* Pure CSS 6s countdown progress bar for CelebrationModal (GPU transform, zero layout reflow) */
+@keyframes progress-countdown-6s {
+  0% {
+    transform: scaleX(1);
+  }
+  100% {
+    transform: scaleX(0);
+  }
+}
+
+.animate-countdown-6s {
+  transform-origin: left center;
+  animation: progress-countdown-6s 6s linear forwards;
+  will-change: transform;
+}
+
+/* Pure CSS toast entrance for TV */
+@keyframes tv-toast-in {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -18px, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.animate-tv-toast {
+  animation: tv-toast-in 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+/* Pure CSS modal pop entrance for TV */
+@keyframes tv-modal-in {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.animate-tv-modal {
+  animation: tv-modal-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+/* TV Carousel Page Transition (GPU-accelerated, zero reflow) */
+@keyframes tv-page-fade {
+  0% {
+    opacity: 0.75;
+    transform: translate3d(0, 3px, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.animate-tv-page {
+  animation: tv-page-fade 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+/* TV Broadcast 15s Progress Bar for Auto-Rotation (100% GPU scaleX, zero CPU layout cost) */
+@keyframes progress-rotation-15s {
+  0% {
+    transform: scaleX(0);
+  }
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+.animate-rotation-progress {
+  transform-origin: left center;
+  animation: progress-rotation-15s 15s linear infinite;
+  will-change: transform;
 }
 
 /* TV remote D-Pad navigation highlight */

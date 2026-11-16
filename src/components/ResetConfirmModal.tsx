@@ -5,22 +5,25 @@ export type ResetType = 'daily' | 'total' | null;
 
 interface ResetConfirmModalProps {
   resetType: ResetType;
+  areaName?: string;
   onClose: () => void;
   onConfirm: (type: 'daily' | 'total') => void;
 }
 
 export const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({
   resetType,
+  areaName,
   onClose,
   onConfirm,
 }) => {
   if (!resetType) return null;
 
+  const targetSuffix = areaName ? ` del Área de ${areaName}` : '';
   const isDaily = resetType === 'daily';
-  const title = isDaily ? '¿Reiniciar Depósitos Diarios?' : '¿Reiniciar Depósitos Totales a $0?';
+  const title = isDaily ? `¿Reiniciar Depósitos Diarios${targetSuffix}?` : `¿Reiniciar Depósitos Totales a $0${targetSuffix}?`;
   const description = isDaily
-    ? 'Esta acción reiniciará los depósitos de hoy a $0 para todos los agentes, conservando el acumulado total histórico.'
-    : 'Esta acción reiniciará TODOS los depósitos (tanto diarios como totales acumulados) a $0 para todos los agentes y vaciará el historial.';
+    ? `Esta acción reiniciará los depósitos de hoy a $0 para los agentes${targetSuffix || ' de todas las áreas'}, conservando el acumulado total histórico.`
+    : `Esta acción reiniciará TODOS los depósitos a $0 para los agentes${targetSuffix || ' de todas las áreas'} y vaciará su historial.`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90">

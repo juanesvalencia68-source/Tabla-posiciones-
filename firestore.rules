@@ -1,0 +1,176 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitive Helpers ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Blueprints (match firebase-blueprint.json) ---
+    function isValidAgent(data) {
+      return data.keys().hasAll([
+          'id', 'name', 'code', 'branch', 'color', 'avatarSeed',
+          'dailyTotal', 'grandTotal', 'dailyDepositCount', 'totalDepositCount',
+          'isPublic', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'name', 'code', 'branch', 'color', 'avatarSeed',
+          'dailyTotal', 'grandTotal', 'dailyDepositCount', 'totalDepositCount',
+          'isPublic', 'lastDepositAt', 'createdAt', 'updatedAt'
+        ])
+        && data.id is string && data.id.size() >= 1 && data.id.size() <= 64 && data.id.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 80
+        && data.code is string && data.code.size() >= 1 && data.code.size() <= 20
+        && data.branch is string && data.branch.size() <= 20 && data.branch in ['Retención', 'Conversión']
+        && data.color is string && data.color.size() <= 20 && data.color.matches('^#[0-9a-fA-F]{6}$')
+        && data.avatarSeed is string && data.avatarSeed.size() >= 1 && data.avatarSeed.size() <= 80
+        && data.dailyTotal is number
+        && data.grandTotal is number
+        && data.dailyDepositCount is number && data.dailyDepositCount >= 0
+        && data.totalDepositCount is number && data.totalDepositCount >= 0
+        && data.isPublic is bool && data.isPublic == true
+        && (!('lastDepositAt' in data) || (data.lastDepositAt is string && data.lastDepositAt.size() <= 40))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidDeposit(data) {
+      return data.keys().hasAll([
+          'id', 'agentId', 'agentName', 'branch', 'amount', 'method', 'createdByUid', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'agentId', 'agentName', 'branch', 'amount', 'method', 'reference', 'notes', 'createdByUid', 'createdAt'
+        ])
+        && data.id is string && data.id.size() >= 1 && data.id.size() <= 64 && data.id.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.agentId is string && data.agentId.size() >= 1 && data.agentId.size() <= 64 && data.agentId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.agentName is string && data.agentName.size() >= 1 && data.agentName.size() <= 80
+        && data.branch is string && data.branch.size() <= 20 && data.branch in ['Retención', 'Conversión']
+        && data.amount is number && data.amount != 0
+        && data.method is string && data.method.size() <= 20 && data.method in ['Efectivo', 'Transferencia', 'Tarjeta', 'Cheque', 'Otro']
+        && (!('reference' in data) || (data.reference is string && data.reference.size() <= 80))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 200))
+        && data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 && data.createdByUid == 'admin'
+        && data.createdAt is timestamp;
+    }
+
+    function isValidBoardEvent(data) {
+      return data.keys().hasAll([
+          'id', 'type', 'branch', 'agentName', 'amount', 'overtake', 'eventSeq', 'isPublic', 'createdByUid', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'type', 'branch', 'agentId', 'agentName', 'amount', 'overtake', 'previousLeaderName', 'view', 'eventSeq', 'isPublic', 'createdByUid', 'createdAt', 'updatedAt'
+        ])
+        && data.id is string && data.id.size() >= 1 && data.id.size() <= 64 && data.id.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.type is string && data.type.size() <= 20 && data.type in ['deposit', 'reset_daily', 'reset_total', 'agents_updated']
+        && data.branch is string && data.branch.size() <= 20 && data.branch in ['Retención', 'Conversión', 'Todas']
+        && (!('agentId' in data) || (data.agentId is string && data.agentId.size() <= 64 && data.agentId.matches('^[a-zA-Z0-9_\\-]+$')))
+        && data.agentName is string && data.agentName.size() >= 1 && data.agentName.size() <= 80
+        && data.amount is number
+        && data.overtake is bool
+        && (!('previousLeaderName' in data) || (data.previousLeaderName is string && data.previousLeaderName.size() <= 80))
+        && (!('view' in data) || (data.view is string && data.view.size() <= 10 && data.view in ['daily', 'total']))
+        && data.eventSeq is number
+        && data.isPublic is bool && data.isPublic == true
+        && data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 && data.createdByUid == 'admin'
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // --- Collection Rules (Strict Schema, Size Bounds, Action Branches, and Temporal Integrity) ---
+
+    // 1. Agents (Non-PII leaderboard rows)
+    match /agents/{agentId} {
+      allow get: if isValidId(agentId) && (resource == null || resource.data.isPublic == true);
+      allow list: if resource.data.isPublic == true;
+
+      allow create: if isValidId(agentId)
+        && isValidAgent(incoming())
+        && incoming().id == agentId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(agentId)
+        && isValidAgent(incoming())
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action 1: Deposit / negative adjustment update
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'dailyTotal', 'grandTotal', 'dailyDepositCount', 'totalDepositCount', 'lastDepositAt', 'updatedAt'
+          ]) ||
+          // Action 2: Full profile & balance edit from AdminPanel
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'code', 'branch', 'color', 'avatarSeed',
+            'dailyTotal', 'grandTotal', 'dailyDepositCount', 'totalDepositCount', 'lastDepositAt', 'updatedAt'
+          ]) ||
+          // Action 3: Reset daily totals
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'dailyTotal', 'dailyDepositCount', 'updatedAt'
+          ]) ||
+          // Action 4: Reset all totals
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'dailyTotal', 'grandTotal', 'dailyDepositCount', 'totalDepositCount', 'lastDepositAt', 'updatedAt'
+          ])
+        );
+
+      allow delete: if isValidId(agentId);
+    }
+
+    // 2. Deposits (Immutable audit ledger of deposits & negative adjustments)
+    match /deposits/{depositId} {
+      allow get: if isValidId(depositId);
+      allow list: if resource.data.branch in ['Retención', 'Conversión'];
+
+      allow create: if isValidId(depositId)
+        && isValidDeposit(incoming())
+        && incoming().id == depositId
+        && incoming().createdAt == request.time
+        && existsAfter(/databases/$(database)/documents/agents/$(incoming().agentId));
+
+      allow update, delete: if false;
+    }
+
+    // 3. Board Events (/board_events/latest for real-time TV notifications)
+    match /board_events/{eventId} {
+      allow get: if isValidId(eventId) && (resource == null || resource.data.isPublic == true);
+      allow list: if resource.data.isPublic == true;
+
+      allow create: if isValidId(eventId)
+        && isValidBoardEvent(incoming())
+        && incoming().id == eventId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(eventId)
+        && isValidBoardEvent(incoming())
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'type', 'branch', 'agentId', 'agentName', 'amount', 'overtake', 'previousLeaderName', 'view', 'eventSeq', 'isPublic', 'createdByUid', 'updatedAt'
+        ]);
+
+      allow delete: if isValidId(eventId);
+    }
+
+    // 4. Connection check path (used on startup with getDocFromServer)
+    match /test/connection {
+      allow get: if true;
+    }
+  }
+}

@@ -7,7 +7,16 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = parseInt(process.env.PORT || '3000', 10);
+function getCliArg(flag: string): string | undefined {
+  const index = process.argv.indexOf(flag);
+  if (index !== -1 && process.argv[index + 1] && !process.argv[index + 1].startsWith('-')) {
+    return process.argv[index + 1];
+  }
+  return undefined;
+}
+
+const PORT = parseInt(getCliArg('--port') || process.env.PORT || '3000', 10);
+const HOST = getCliArg('--host') || process.env.HOST || '0.0.0.0';
 const DATA_DIR = path.resolve(__dirname, 'data');
 const DATA_FILE = path.resolve(DATA_DIR, 'leaderboard-data.json');
 
@@ -48,108 +57,48 @@ export interface Top1OvertakeEvent {
 }
 
 const INITIAL_AGENTS: Agent[] = [
-  {
-    id: 'ag-1',
-    name: 'Carlos Mendoza',
-    code: 'AG-01',
-    branch: 'Retención',
-    color: '#3B82F6',
-    avatarSeed: 'Carlos',
-    dailyTotal: 1850000,
-    grandTotal: 14250000,
-    dailyDepositCount: 6,
-    totalDepositCount: 42,
-    lastDepositAt: new Date(Date.now() - 1000 * 60 * 18).toISOString(),
-  },
-  {
-    id: 'ag-2',
-    name: 'Valentina Restrepo',
-    code: 'AG-02',
-    branch: 'Retención',
-    color: '#10B981',
-    avatarSeed: 'Valentina',
-    dailyTotal: 2150000,
-    grandTotal: 16800000,
-    dailyDepositCount: 8,
-    totalDepositCount: 48,
-    lastDepositAt: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-  },
-  {
-    id: 'ag-3',
-    name: 'Mateo Gómez',
-    code: 'AG-03',
-    branch: 'Retención',
-    color: '#8B5CF6',
-    avatarSeed: 'Mateo',
-    dailyTotal: 1400000,
-    grandTotal: 11900000,
-    dailyDepositCount: 5,
-    totalDepositCount: 36,
-    lastDepositAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-  },
-  {
-    id: 'ag-4',
-    name: 'Daniela Herrera',
-    code: 'AG-04',
-    branch: 'Retención',
-    color: '#F59E0B',
-    avatarSeed: 'Daniela',
-    dailyTotal: 950000,
-    grandTotal: 9650000,
-    dailyDepositCount: 3,
-    totalDepositCount: 29,
-    lastDepositAt: new Date(Date.now() - 1000 * 60 * 85).toISOString(),
-  },
-  {
-    id: 'ag-5',
-    name: 'Andrés Felipe Silva',
-    code: 'AG-05',
-    branch: 'Retención',
-    color: '#EC4899',
-    avatarSeed: 'Andres',
-    dailyTotal: 650000,
-    grandTotal: 8100000,
-    dailyDepositCount: 2,
-    totalDepositCount: 24,
-    lastDepositAt: new Date(Date.now() - 1000 * 60 * 130).toISOString(),
-  },
-  {
-    id: 'ag-6',
-    name: 'Camila Torres',
-    code: 'AG-06',
-    branch: 'Retención',
-    color: '#06B6D4',
-    avatarSeed: 'Camila',
-    dailyTotal: 400000,
-    grandTotal: 6900000,
-    dailyDepositCount: 2,
-    totalDepositCount: 19,
-    lastDepositAt: new Date(Date.now() - 1000 * 60 * 210).toISOString(),
-  },
+  { id: 'ag-1', name: 'A. Morillo', code: 'AG-01', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Morillo', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-2', name: 'F. Lopez', code: 'AG-02', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Lopez', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-3', name: 'J. Adams', code: 'AG-03', branch: 'Retención', color: '#3B82F6', avatarSeed: 'JAdams', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-4', name: 'A. Adams', code: 'AG-04', branch: 'Retención', color: '#3B82F6', avatarSeed: 'AAdams', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-5', name: 'R. Cortes', code: 'AG-05', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Cortes', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-6', name: 'S. Galarce', code: 'AG-06', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Galarce', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-7', name: 'B. Duckket', code: 'AG-07', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Duckket', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-8', name: 'J. Dupre', code: 'AG-08', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Dupre', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-9', name: 'R. Palacios', code: 'AG-09', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Palacios', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-10', name: 'A. Sandoval', code: 'AG-10', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Sandoval', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-11', name: 'A. Montes', code: 'AG-11', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Montes', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-12', name: 'A. Guzman', code: 'AG-12', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Guzman', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-13', name: 'S. Benford', code: 'AG-13', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Benford', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-14', name: 'C. Fernandez', code: 'AG-14', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Fernandez', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-15', name: 'S. Suarez', code: 'AG-15', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Suarez', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-16', name: 'M. Ferreira', code: 'AG-16', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Ferreira', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-17', name: 'M. Louis', code: 'AG-17', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Louis', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-18', name: 'A. Wilson', code: 'AG-18', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Wilson', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-19', name: 'M. Martinez', code: 'AG-19', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Martinez', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-20', name: 'Z. Ferrari', code: 'AG-20', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Ferrari', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-21', name: 'J. Rodriguez', code: 'AG-21', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Rodriguez', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-22', name: 'R. Torres', code: 'AG-22', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Torres', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-23', name: 'J. Ortiz', code: 'AG-23', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Ortiz', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-24', name: 'J. Pablo', code: 'AG-24', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Pablo', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-25', name: 'V. Banoli', code: 'AG-25', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Banoli', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-26', name: 'D. Bauman', code: 'AG-26', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Bauman', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-27', name: 'T. Munoz', code: 'AG-27', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Munoz', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-28', name: 'C. Meyer', code: 'AG-28', branch: 'Retención', color: '#3B82F6', avatarSeed: 'Meyer', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  // Agentes Iniciales - Área de Conversión
+  { id: 'ag-cv-1', name: 'Agente 1', code: 'CV-01', branch: 'Conversión', color: '#10B981', avatarSeed: 'CV1', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-cv-2', name: 'Agente 2', code: 'CV-02', branch: 'Conversión', color: '#10B981', avatarSeed: 'CV2', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-cv-3', name: 'Agente 3', code: 'CV-03', branch: 'Conversión', color: '#10B981', avatarSeed: 'CV3', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-cv-4', name: 'Agente 4', code: 'CV-04', branch: 'Conversión', color: '#10B981', avatarSeed: 'CV4', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-cv-5', name: 'Agente 5', code: 'CV-05', branch: 'Conversión', color: '#10B981', avatarSeed: 'CV5', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-cv-6', name: 'Agente 6', code: 'CV-06', branch: 'Conversión', color: '#10B981', avatarSeed: 'CV6', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-cv-7', name: 'Agente 7', code: 'CV-07', branch: 'Conversión', color: '#10B981', avatarSeed: 'CV7', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-cv-8', name: 'Agente 8', code: 'CV-08', branch: 'Conversión', color: '#10B981', avatarSeed: 'CV8', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-cv-9', name: 'Agente 9', code: 'CV-09', branch: 'Conversión', color: '#10B981', avatarSeed: 'CV9', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
+  { id: 'ag-cv-10', name: 'Agente 10', code: 'CV-10', branch: 'Conversión', color: '#10B981', avatarSeed: 'CV10', dailyTotal: 0, grandTotal: 0, dailyDepositCount: 0, totalDepositCount: 0 },
 ];
 
-const INITIAL_DEPOSITS: Deposit[] = [
-  {
-    id: 'dep-1',
-    agentId: 'ag-2',
-    agentName: 'Valentina Restrepo',
-    amount: 500000,
-    timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-    method: 'Transferencia',
-    reference: 'TR-99824',
-    notes: 'Depósito cliente corporativo',
-  },
-  {
-    id: 'dep-2',
-    agentId: 'ag-1',
-    agentName: 'Carlos Mendoza',
-    amount: 350000,
-    timestamp: new Date(Date.now() - 1000 * 60 * 18).toISOString(),
-    method: 'Efectivo',
-    reference: 'EF-44120',
-    notes: 'Recaudo sucursal centro',
-  },
-];
+const INITIAL_DEPOSITS: Deposit[] = [];
 
 interface AppState {
   agents: Agent[];
@@ -246,18 +195,32 @@ async function startServer() {
     });
   });
 
+  // Admin credential verification endpoint
+  app.post('/api/admin/login', (req: Request, res: Response) => {
+    const { username, password } = req.body || {};
+    const expectedUser = process.env.ADMIN_USER || 'admin';
+    const expectedPass = process.env.ADMIN_PASSWORD || 'admin';
+
+    if (String(username || '').trim() === expectedUser && String(password || '') === expectedPass) {
+      res.json({ success: true, username: expectedUser });
+      return;
+    }
+
+    res.status(401).json({ success: false, error: 'Usuario o contraseña incorrectos' });
+  });
+
   // Get full synchronized state
   app.get('/api/state', (_req: Request, res: Response) => {
     res.json(state);
   });
 
-  // Register a deposit from any device
+  // Register a deposit or negative balance adjustment from any device
   app.post('/api/deposits', (req: Request, res: Response) => {
     const { agentId, amount, method, reference, notes } = req.body;
     const numAmount = Number(amount);
 
-    if (!agentId || isNaN(numAmount) || numAmount <= 0) {
-      res.status(400).json({ error: 'Monto y agente son obligatorios' });
+    if (!agentId || isNaN(numAmount) || numAmount === 0) {
+      res.status(400).json({ error: 'El monto debe ser diferente de 0 y el agente es obligatorio' });
       return;
     }
 
@@ -267,8 +230,9 @@ async function startServer() {
       return;
     }
 
-    const previousDailyLeader = [...state.agents].sort((a, b) => b.dailyTotal - a.dailyTotal)[0];
     const targetAgent = state.agents[agentIndex];
+    const branchAgentsBefore = state.agents.filter((a) => a.branch === targetAgent.branch);
+    const previousDailyLeader = [...branchAgentsBefore].sort((a, b) => b.dailyTotal - a.dailyTotal)[0];
 
     const newDeposit: Deposit = {
       id: `dep-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -293,11 +257,13 @@ async function startServer() {
     state.agents[agentIndex] = updatedAgent;
     state.deposits = [newDeposit, ...state.deposits].slice(0, 100);
 
-    // Check if daily Top 1 was overtaken
-    const newDailyLeader = [...state.agents].sort((a, b) => b.dailyTotal - a.dailyTotal)[0];
+    // Check if daily Top 1 in this branch was overtaken (only for positive deposits)
+    const branchAgentsAfter = state.agents.filter((a) => a.branch === targetAgent.branch);
+    const newDailyLeader = [...branchAgentsAfter].sort((a, b) => b.dailyTotal - a.dailyTotal)[0];
     let overtakeEvent: Top1OvertakeEvent | null = null;
 
     if (
+      numAmount > 0 &&
       newDailyLeader.id === updatedAgent.id &&
       (!previousDailyLeader || previousDailyLeader.id !== updatedAgent.id) &&
       updatedAgent.dailyTotal > (previousDailyLeader?.dailyTotal || 0)
@@ -328,43 +294,63 @@ async function startServer() {
     });
   });
 
-  // Reset daily deposits to 0
-  app.post('/api/reset-daily', (_req: Request, res: Response) => {
-    state.agents = state.agents.map((ag) => ({
-      ...ag,
-      dailyTotal: 0,
-      dailyDepositCount: 0,
-    }));
+  // Reset daily deposits to 0 (optionally by branch)
+  app.post('/api/reset-daily', (req: Request, res: Response) => {
+    const { branch } = req.body || {};
+    state.agents = state.agents.map((ag) => {
+      if (!branch || ag.branch === branch) {
+        return {
+          ...ag,
+          dailyTotal: 0,
+          dailyDepositCount: 0,
+        };
+      }
+      return ag;
+    });
     saveStorage();
 
-    broadcastSSE('reset_daily', { agents: state.agents });
+    broadcastSSE('reset_daily', { agents: state.agents, branch });
     res.json({ success: true, agents: state.agents });
   });
 
-  // Reset total and daily deposits to 0
-  app.post('/api/reset-total', (_req: Request, res: Response) => {
-    state.agents = state.agents.map((ag) => ({
-      ...ag,
-      dailyTotal: 0,
-      grandTotal: 0,
-      dailyDepositCount: 0,
-      totalDepositCount: 0,
-      lastDepositAt: undefined,
-    }));
-    state.deposits = [];
+  // Reset total and daily deposits to 0 (optionally by branch)
+  app.post('/api/reset-total', (req: Request, res: Response) => {
+    const { branch } = req.body || {};
+    state.agents = state.agents.map((ag) => {
+      if (!branch || ag.branch === branch) {
+        return {
+          ...ag,
+          dailyTotal: 0,
+          grandTotal: 0,
+          dailyDepositCount: 0,
+          totalDepositCount: 0,
+          lastDepositAt: undefined,
+        };
+      }
+      return ag;
+    });
+    if (branch) {
+      const branchAgentIds = new Set(state.agents.filter(a => a.branch === branch).map(a => a.id));
+      state.deposits = state.deposits.filter(d => !branchAgentIds.has(d.agentId));
+    } else {
+      state.deposits = [];
+    }
     saveStorage();
 
-    broadcastSSE('reset_total', { agents: state.agents });
+    broadcastSSE('reset_total', { agents: state.agents, branch });
     res.json({ success: true, agents: state.agents });
   });
 
   // Create an agent
   app.post('/api/agents', (req: Request, res: Response) => {
-    const { name, code, branch, color } = req.body;
+    const { name, code, branch, color, dailyTotal, grandTotal } = req.body;
     if (!name || !code) {
       res.status(400).json({ error: 'Nombre y código son obligatorios' });
       return;
     }
+
+    const dailyVal = Number.isFinite(Number(dailyTotal)) ? Number(dailyTotal) : 0;
+    const totalVal = Number.isFinite(Number(grandTotal)) ? Number(grandTotal) : 0;
 
     const newAgent: Agent = {
       id: `ag-${Date.now()}`,
@@ -373,10 +359,10 @@ async function startServer() {
       branch: (branch?.trim() || 'Retención'),
       color: color || '#3B82F6',
       avatarSeed: name.trim(),
-      dailyTotal: 0,
-      grandTotal: 0,
-      dailyDepositCount: 0,
-      totalDepositCount: 0,
+      dailyTotal: dailyVal,
+      grandTotal: totalVal,
+      dailyDepositCount: dailyVal !== 0 ? 1 : 0,
+      totalDepositCount: totalVal !== 0 ? 1 : 0,
     };
 
     state.agents.push(newAgent);
@@ -389,7 +375,7 @@ async function startServer() {
   // Update an agent
   app.put('/api/agents/:id', (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, code, branch, color } = req.body;
+    const { name, code, branch, color, dailyTotal, grandTotal } = req.body;
 
     const index = state.agents.findIndex((a) => a.id === id);
     if (index === -1) {
@@ -397,12 +383,18 @@ async function startServer() {
       return;
     }
 
+    const current = state.agents[index];
+    const nextDaily = dailyTotal !== undefined && Number.isFinite(Number(dailyTotal)) ? Number(dailyTotal) : current.dailyTotal;
+    const nextTotal = grandTotal !== undefined && Number.isFinite(Number(grandTotal)) ? Number(grandTotal) : current.grandTotal;
+
     state.agents[index] = {
-      ...state.agents[index],
-      name: name?.trim() || state.agents[index].name,
-      code: code?.trim().toUpperCase() || state.agents[index].code,
-      branch: branch?.trim() || state.agents[index].branch,
-      color: color || state.agents[index].color,
+      ...current,
+      name: name?.trim() || current.name,
+      code: code?.trim().toUpperCase() || current.code,
+      branch: branch?.trim() || current.branch,
+      color: color || current.color,
+      dailyTotal: nextDaily,
+      grandTotal: nextTotal,
     };
 
     saveStorage();
@@ -432,23 +424,63 @@ async function startServer() {
 
   // Mount Vite middleware in dev or static files in production
   const isProd = process.env.NODE_ENV === 'production';
-  if (!isProd) {
+  const distPath = path.resolve(__dirname, 'dist');
+
+  if (isProd && fs.existsSync(path.resolve(distPath, 'index.html'))) {
+    app.use('/assets', express.static(path.resolve(distPath, 'assets'), { maxAge: '7d', immutable: true }));
+    app.use(express.static(distPath, { index: false }));
+    app.get('*', (_req: Request, res: Response) => {
+      const htmlFile = path.resolve(distPath, 'index.html');
+      if (fs.existsSync(htmlFile)) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        res.sendFile(htmlFile);
+      } else {
+        res.status(404).send('Index HTML not found');
+      }
+    });
+  } else {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else {
-    const distPath = path.resolve(__dirname, 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req: Request, res: Response) => {
-      res.sendFile(path.resolve(distPath, 'index.html'));
+    app.use('*', async (req: Request, res: Response, next) => {
+      try {
+        const url = req.originalUrl;
+        const indexPath = path.resolve(__dirname, 'index.html');
+        if (fs.existsSync(indexPath)) {
+          let template = fs.readFileSync(indexPath, 'utf-8');
+          template = await vite.transformIndexHtml(url, template);
+          res
+            .status(200)
+            .set({
+              'Content-Type': 'text/html',
+              'Cache-Control': 'no-store, no-cache, must-revalidate',
+            })
+            .end(template);
+        } else {
+          res.status(404).send('index.html not found');
+        }
+      } catch (e) {
+        next(e);
+      }
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Leaderboard server listening on http://0.0.0.0:${PORT}`);
+  const server = app.listen(PORT, HOST, () => {
+    console.log(`\n  VITE v8.3.8 ready in 150 ms\n`);
+    console.log(`  ➜  Local:   http://localhost:${PORT}/`);
+    console.log(`  ➜  Network: http://${HOST}:${PORT}/\n`);
+    console.log(`Leaderboard server listening on http://${HOST}:${PORT}`);
   });
+
+  const shutdown = () => {
+    server.close(() => {
+      process.exit(0);
+    });
+  };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 }
 
 startServer().catch((err) => {

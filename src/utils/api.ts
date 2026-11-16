@@ -36,6 +36,10 @@ export function subscribeToLiveUpdates(handlers: SyncHandlers): () => void {
   function connect() {
     if (isClosed) return;
     try {
+      if (typeof window === 'undefined' || !('EventSource' in window)) {
+        console.warn('EventSource no está disponible en este navegador de TV. Se usará sondeo silencioso.');
+        return;
+      }
       eventSource = new EventSource('/api/events');
 
       eventSource.onopen = () => {
@@ -114,18 +118,33 @@ export function subscribeToLiveUpdates(handlers: SyncHandlers): () => void {
 
   connect();
 
-  // Secondary silent polling fallback every 8 seconds for Smart TVs if SSE pauses
+  // Track hash of agents to avoid pointless re-renders on Smart TVs
+  let lastAgentsSignature = '';
+
+  const updateIfChanged = (agentsList: Agent[]) => {
+    const signature = agentsList.map((a) => `${a.id}:${a.dailyTotal}:${a.grandTotal}`).join('|');
+    if (signature !== lastAgentsSignature) {
+      lastAgentsSignature = signature;
+      handlers.onAgentsUpdated(agentsList);
+    }
+  };
+
+  // Secondary silent polling fallback: ONLY run if EventSource is disconnected or failed!
   const pollInterval = setInterval(async () => {
     if (isClosed) return;
+    // If SSE is active and healthy, zero polling needed!
+    if (eventSource && eventSource.readyState === EventSource.OPEN) {
+      return;
+    }
     try {
       const fresh = await fetchState();
       if (fresh.agents) {
-        handlers.onAgentsUpdated(fresh.agents);
+        updateIfChanged(fresh.agents);
       }
     } catch {
       // ignore silent poll error
     }
-  }, 8000);
+  }, 15000);
 
   return () => {
     isClosed = true;
@@ -157,15 +176,23 @@ export async function submitDepositApi(data: {
   return res.json();
 }
 
-export async function resetDailyApi(): Promise<Agent[]> {
-  const res = await fetch('/api/reset-daily', { method: 'POST' });
+export async function resetDailyApi(branch?: string): Promise<Agent[]> {
+  const res = await fetch('/api/reset-daily', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ branch }),
+  });
   if (!res.ok) throw new Error('Error al reiniciar depósitos diarios');
   const data = await res.json();
   return data.agents;
 }
 
-export async function resetTotalApi(): Promise<Agent[]> {
-  const res = await fetch('/api/reset-total', { method: 'POST' });
+export async function resetTotalApi(branch?: string): Promise<Agent[]> {
+  const res = await fetch('/api/reset-total', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ branch }),
+  });
   if (!res.ok) throw new Error('Error al reiniciar depósitos totales');
   const data = await res.json();
   return data.agents;

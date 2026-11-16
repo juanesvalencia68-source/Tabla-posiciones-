@@ -9,27 +9,40 @@ class SoundEngine {
   private volume: number = 0.9;
 
   constructor() {
-    const savedMuted = localStorage.getItem('sound_muted');
-    if (savedMuted !== null) {
-      this.isMuted = savedMuted === 'true';
-    }
-    const savedVolume = localStorage.getItem('sound_volume');
-    if (savedVolume !== null) {
-      this.volume = parseFloat(savedVolume);
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const savedMuted = localStorage.getItem('sound_muted');
+        if (savedMuted !== null) {
+          this.isMuted = savedMuted === 'true';
+        }
+        const savedVolume = localStorage.getItem('sound_volume');
+        if (savedVolume !== null) {
+          this.volume = parseFloat(savedVolume);
+        }
+      }
+    } catch (err) {
+      console.warn('Smart TV restricted localStorage access:', err);
     }
   }
 
-  private initContext() {
-    if (!this.ctx) {
-      const AudioContextClass =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      this.ctx = new AudioContextClass();
+  private initContext(): AudioContext | null {
+    try {
+      if (!this.ctx && typeof window !== 'undefined') {
+        const AudioContextClass =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (AudioContextClass) {
+          this.ctx = new AudioContextClass();
+        }
+      }
+      if (this.ctx && this.ctx.state === 'suspended') {
+        this.ctx.resume().catch(() => {});
+      }
+      return this.ctx;
+    } catch (err) {
+      console.warn('AudioContext not available on this TV:', err);
+      return null;
     }
-    if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
-    }
-    return this.ctx;
   }
 
   public setMuted(muted: boolean) {
@@ -58,6 +71,7 @@ class SoundEngine {
     if (this.isMuted) return;
     try {
       const ctx = this.initContext();
+      if (!ctx) return;
       const now = ctx.currentTime;
       const masterGain = ctx.createGain();
       masterGain.gain.setValueAtTime(this.volume * 0.85, now);
@@ -132,6 +146,7 @@ class SoundEngine {
     if (this.isMuted) return;
     try {
       const ctx = this.initContext();
+      if (!ctx) return;
       const now = ctx.currentTime;
       const masterGain = ctx.createGain();
       masterGain.gain.setValueAtTime(this.volume * 0.7, now);

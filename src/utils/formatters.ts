@@ -2,11 +2,12 @@
  * Formatting utilities for currency, dates, numbers and visual styles
  */
 
+const numberFormatter = new Intl.NumberFormat('es-CO', {
+  maximumFractionDigits: 0,
+});
+
 export function formatCurrency(amount: number, currencySymbol: string = '$'): string {
-  const formatted = new Intl.NumberFormat('es-CO', {
-    maximumFractionDigits: 0,
-  }).format(amount);
-  return `${currencySymbol} ${formatted}`;
+  return `${currencySymbol} ${numberFormatter.format(amount || 0)}`;
 }
 
 export function formatCompactCurrency(amount: number, currencySymbol: string = '$'): string {

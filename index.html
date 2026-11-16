@@ -11,11 +11,31 @@
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" media="print" onload="this.media='all'">
+    <style>
+      body {
+        margin: 0;
+        background-color: #020617;
+        color: #f8fafc;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+    </style>
   </head>
   <body class="bg-slate-950 text-slate-100 font-sans antialiased selection:bg-amber-500/30 selection:text-amber-200">
-    <div id="root"></div>
+    <div id="root">
+      <div style="min-height: 100vh; background-color: #020617; color: #f8fafc; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: system-ui, -apple-system, sans-serif; text-align: center; padding: 20px;">
+        <div style="width: 56px; height: 56px; border-radius: 16px; background-color: #f59e0b; color: #020617; display: flex; align-items: center; justify-content: center; font-size: 32px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(245,158,11,0.3);">
+          👑
+        </div>
+        <div style="font-size: 26px; font-weight: 800; margin-bottom: 8px; color: #ffffff; letter-spacing: -0.5px;">
+          Tabla de Posiciones
+        </div>
+        <div style="font-size: 15px; color: #94a3b8; margin-bottom: 24px;">
+          Cargando agentes y sincronización en vivo...
+        </div>
+        <div style="width: 48px; height: 4px; background-color: #f59e0b; border-radius: 9999px;"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

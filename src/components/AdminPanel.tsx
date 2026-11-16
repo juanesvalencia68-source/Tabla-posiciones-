@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   UserPlus, 
   Pencil, 
@@ -13,13 +13,18 @@ import {
   Users,
   DollarSign,
   Sparkles,
-  RotateCcw
+  RotateCcw,
+  LogIn,
+  LogOut,
+  Lock
 } from 'lucide-react';
 import { Agent, DepositMethod } from '../types';
 import { formatCurrency } from '../utils/formatters';
+import { useFirebase } from '../contexts/FirebaseContext';
 
 interface AdminPanelProps {
   agents: Agent[];
+  currentArea?: 'Retención' | 'Conversión';
   onConfirmDeposit: (
     agentId: string,
     amount: number,
@@ -50,6 +55,7 @@ const COLOR_OPTIONS = [
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
   agents,
+  currentArea = 'Retención',
   onConfirmDeposit,
   onAddAgent,
   onUpdateAgent,
@@ -59,8 +65,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onSimulateDeposit,
   onBackToBoard,
 }) => {
+  const { authReady, isAdmin, adminUsername, authError, isSigningIn, loginWithCredentials, logout } = useFirebase();
+
+  // Admin login form state
+  const [loginUser, setLoginUser] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+
+  // Area filter for agent selector in deposit form
+  const [depositAreaFilter, setDepositAreaFilter] = useState<'Todas' | 'Retención' | 'Conversión'>(currentArea);
+
+  // Filtered agents for deposit selection
+  const depositAgents = agents.filter(
+    (a) => depositAreaFilter === 'Todas' || a.branch === depositAreaFilter
+  );
+
   // Deposit entry form state
-  const [selectedAgentId, setSelectedAgentId] = useState<string>(agents[0]?.id || '');
+  const [selectedAgentId, setSelectedAgentId] = useState<string>(depositAgents[0]?.id || agents[0]?.id || '');
   const [depositAmount, setDepositAmount] = useState<string>('');
   const [depositError, setDepositError] = useState<string | null>(null);
 
@@ -73,25 +93,46 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Form states (for both create & edit agent)
   const [formName, setFormName] = useState('');
   const [formCode, setFormCode] = useState('');
-  const [formBranch, setFormBranch] = useState('Retención');
+  const [formBranch, setFormBranch] = useState<string>(currentArea);
   const [formColor, setFormColor] = useState(COLOR_OPTIONS[0]);
   const [formDaily, setFormDaily] = useState('0');
   const [formTotal, setFormTotal] = useState('0');
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Sync selectedAgentId if empty
-  React.useEffect(() => {
-    if ((!selectedAgentId || !agents.some((a) => a.id === selectedAgentId)) && agents.length > 0) {
-      setSelectedAgentId(agents[0].id);
+  // Sync selectedAgentId if empty or not in depositAgents
+  useEffect(() => {
+    if (!depositAgents.some((a) => a.id === selectedAgentId) && depositAgents.length > 0) {
+      setSelectedAgentId(depositAgents[0].id);
     }
-  }, [agents, selectedAgentId]);
+  }, [depositAgents, selectedAgentId]);
+
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await loginWithCredentials(loginUser, loginPassword);
+  };
 
   const currentDepositAgent = agents.find((a) => a.id === selectedAgentId);
   const parsedDepositAmount = parseFloat(depositAmount) || 0;
+  const isNegativeInput = depositAmount.trim().startsWith('-') || parsedDepositAmount < 0;
 
   const handleAddPreset = (val: number) => {
     const current = parseFloat(depositAmount) || 0;
-    setDepositAmount(String(current + val));
+    const next = isNegativeInput ? current - val : current + val;
+    setDepositAmount(String(next));
+    setDepositError(null);
+  };
+
+  const handleToggleSign = () => {
+    if (!depositAmount.trim()) {
+      setDepositAmount('-');
+    } else if (depositAmount.trim() === '-') {
+      setDepositAmount('');
+    } else {
+      const val = parseFloat(depositAmount);
+      if (!isNaN(val)) {
+        setDepositAmount(String(-val));
+      }
+    }
     setDepositError(null);
   };
 
@@ -101,8 +142,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setDepositError('Por favor selecciona un agente');
       return;
     }
-    if (parsedDepositAmount <= 0) {
-      setDepositError('El monto debe ser mayor a 0');
+    if (isNaN(parsedDepositAmount) || parsedDepositAmount === 0) {
+      setDepositError('El monto debe ser distinto de 0 (positivo o negativo)');
       return;
     }
 
@@ -114,9 +155,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const startCreate = () => {
     setEditingAgent(null);
     setFormName('');
-    setFormCode(`AG-${String(agents.length + 1).padStart(2, '0')}`);
-    setFormBranch('Retención');
-    setFormColor(COLOR_OPTIONS[agents.length % COLOR_OPTIONS.length]);
+    const targetBranch = currentArea || 'Retención';
+    const isConv = targetBranch === 'Conversión';
+    const prefix = isConv ? 'CV' : 'AG';
+    const existingInBranch = agents.filter((a) => a.branch === targetBranch).length;
+    setFormCode(`${prefix}-${String(existingInBranch + 1).padStart(2, '0')}`);
+    setFormBranch(targetBranch);
+    setFormColor(isConv ? '#10B981' : COLOR_OPTIONS[agents.length % COLOR_OPTIONS.length]);
     setFormDaily('0');
     setFormTotal('0');
     setFormError(null);
@@ -191,6 +236,88 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const deletingAgent = agents.find((a) => a.id === deletingAgentId);
 
+  // Guard 1: Auth loading
+  if (!authReady) {
+    return (
+      <div className="max-w-md mx-auto my-12 bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center">
+        <p className="text-sm text-slate-300 font-semibold">Verificando sesión de administrador...</p>
+      </div>
+    );
+  }
+
+  // Guard 2: Username & Password login form (admin / admin)
+  if (!isAdmin) {
+    return (
+      <div className="max-w-sm mx-auto my-10 bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-5">
+        <div className="text-center space-y-2">
+          <button
+            type="button"
+            onClick={onBackToBoard}
+            className="inline-flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 font-semibold transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Volver a la Tabla de Posiciones</span>
+          </button>
+
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+            <Lock className="w-6 h-6" />
+          </div>
+
+          <h2 className="text-lg font-extrabold text-white">Acceso de Administrador</h2>
+          <p className="text-xs text-slate-400">
+            Ingresa tus credenciales para registrar depósitos y gestionar agentes.
+          </p>
+        </div>
+
+        <form onSubmit={handleLoginSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+              Usuario
+            </label>
+            <input
+              type="text"
+              autoComplete="username"
+              placeholder="admin"
+              value={loginUser}
+              onChange={(e) => setLoginUser(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white outline-none focus:border-amber-500"
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+              Contraseña
+            </label>
+            <input
+              type="password"
+              autoComplete="current-password"
+              placeholder="•••••"
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white outline-none focus:border-amber-500"
+            />
+          </div>
+
+          {authError && (
+            <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 text-center">
+              {authError}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={isSigningIn}
+            className="w-full py-3 px-4 bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-slate-950 font-extrabold text-sm rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <LogIn className="w-4 h-4" />
+            <span>{isSigningIn ? 'Ingresando...' : 'Ingresar'}</span>
+          </button>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Top Breadcrumb & Title */}
@@ -205,17 +332,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </button>
           <h2 className="text-xl font-bold text-white">Panel de Administración</h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Registro de depósitos, gestión de agentes y controles de reinicio.
+            Conectado como <strong className="text-emerald-400">{adminUsername || 'admin'}</strong> · Guardado permanente en la nube
           </p>
         </div>
 
-        <button
-          onClick={startCreate}
-          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-md active:scale-95 cursor-pointer"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span>+ Nuevo Agente</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={logout}
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+            title="Cerrar sesión de administrador"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Salir</span>
+          </button>
+
+          <button
+            onClick={startCreate}
+            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-md active:scale-95 cursor-pointer"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>+ Nuevo Agente</span>
+          </button>
+        </div>
       </div>
 
       {/* SECTION 1: ÁREA DE INGRESAR DEPÓSITOS Y CONTROLES */}
@@ -252,9 +391,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Agent Selector */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Seleccionar Agente *
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                    Seleccionar Agente *
+                  </label>
+                  <div className="flex items-center gap-1 text-[11px]">
+                    {(['Retención', 'Conversión', 'Todas'] as const).map((filter) => (
+                      <button
+                        key={filter}
+                        type="button"
+                        onClick={() => setDepositAreaFilter(filter)}
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-colors ${
+                          depositAreaFilter === filter
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {filter}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <select
                   value={selectedAgentId}
                   onChange={(e) => {
@@ -263,7 +420,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   }}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-amber-500 transition-colors"
                 >
-                  {agents.map((ag) => (
+                  {depositAgents.map((ag) => (
                     <option key={ag.id} value={ag.id}>
                       {ag.name} ({ag.code} - Área: {ag.branch})
                     </option>
@@ -283,24 +440,41 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               {/* Amount Input */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Monto del Depósito ($) *
+                  Monto del Depósito ($) * <span className="text-[10px] font-normal text-slate-400 normal-case">(Acepta negativos)</span>
                 </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-amber-400 font-bold text-base">
-                    $
-                  </span>
-                  <input
-                    type="number"
-                    min="1"
-                    step="any"
-                    placeholder="0"
-                    value={depositAmount}
-                    onChange={(e) => {
-                      setDepositAmount(e.target.value);
-                      setDepositError(null);
-                    }}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-8 pr-3 py-2.5 text-base font-mono font-bold text-white placeholder-slate-600 outline-none focus:border-amber-500 transition-colors"
-                  />
+                <div className="relative flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <span className={`absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-base ${isNegativeInput ? 'text-rose-400' : 'text-amber-400'}`}>
+                      $
+                    </span>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="Ej: 100000 o -50000"
+                      value={depositAmount}
+                      onChange={(e) => {
+                        setDepositAmount(e.target.value);
+                        setDepositError(null);
+                      }}
+                      className={`w-full bg-slate-950 border rounded-xl pl-8 pr-3 py-2.5 text-base font-mono font-bold placeholder-slate-600 outline-none transition-colors ${
+                        isNegativeInput
+                          ? 'border-rose-500/60 text-rose-300 focus:border-rose-400'
+                          : 'border-slate-700 text-white focus:border-amber-500'
+                      }`}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleToggleSign}
+                    className={`px-3 py-2.5 rounded-xl font-mono font-bold text-sm border transition-colors cursor-pointer shrink-0 ${
+                      isNegativeInput
+                        ? 'bg-rose-500/20 border-rose-500/50 text-rose-300 hover:bg-rose-500/30'
+                        : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700'
+                    }`}
+                    title="Cambiar entre positivo (+) y negativo (-)"
+                  >
+                    +/−
+                  </button>
                 </div>
 
                 {/* Preset shortcuts */}
@@ -310,9 +484,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       type="button"
                       key={val}
                       onClick={() => handleAddPreset(val)}
-                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg font-mono border border-slate-700 hover:border-amber-500/50 transition-colors cursor-pointer"
+                      className={`px-2 py-1 text-xs rounded-lg font-mono border transition-colors cursor-pointer ${
+                        isNegativeInput
+                          ? 'bg-rose-950/50 hover:bg-rose-900/60 text-rose-300 border-rose-800/60'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700 hover:border-amber-500/50'
+                      }`}
                     >
-                      +{formatCurrency(val).replace('$ ', '')}
+                      {isNegativeInput ? '-' : '+'}{formatCurrency(val).replace('$ ', '')}
                     </button>
                   ))}
                   <button
@@ -334,10 +512,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             <button
               type="submit"
-              className="w-full py-3 px-4 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-bold text-sm rounded-xl transition-all shadow-lg shadow-emerald-500/10 active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+              className={`w-full py-3 px-4 font-bold text-sm rounded-xl transition-all shadow-lg active:scale-98 flex items-center justify-center gap-2 cursor-pointer ${
+                isNegativeInput
+                  ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-500/10'
+                  : 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 shadow-emerald-500/10'
+              }`}
             >
               <Check className="w-4 h-4" />
-              <span>Registrar Depósito</span>
+              <span>
+                {isNegativeInput
+                  ? `Registrar Saldo Negativo (${parsedDepositAmount < 0 ? formatCurrency(parsedDepositAmount) : '-'})`
+                  : 'Registrar Depósito'}
+              </span>
             </button>
           </form>
         </div>
@@ -432,8 +618,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-2.5">
                           <div
-                            className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs text-white shrink-0 border border-white/10"
-                            style={{ backgroundColor: agent.color }}
+                            className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs text-slate-300 shrink-0 bg-slate-800 border border-slate-700/80"
                           >
                             {agent.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
                           </div>
@@ -516,6 +701,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </label>
                 <input
                   type="text"
+                  maxLength={80}
                   placeholder="Ej. Roberto Gómez"
                   value={formName}
                   onChange={(e) => {
@@ -534,6 +720,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </label>
                   <input
                     type="text"
+                    maxLength={20}
                     placeholder="AG-01"
                     value={formCode}
                     onChange={(e) => setFormCode(e.target.value)}
@@ -544,13 +731,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
                     Área
                   </label>
-                  <input
-                    type="text"
-                    placeholder="Retención"
-                    value={formBranch}
+                  <select
+                    value={formBranch === 'Conversión' ? 'Conversión' : 'Retención'}
                     onChange={(e) => setFormBranch(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-500"
-                  />
+                  >
+                    <option value="Retención">Retención</option>
+                    <option value="Conversión">Conversión</option>
+                  </select>
                 </div>
               </div>
 
@@ -583,7 +771,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </label>
                   <input
                     type="number"
-                    min="0"
                     step="any"
                     value={formDaily}
                     onChange={(e) => setFormDaily(e.target.value)}
@@ -596,7 +783,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </label>
                   <input
                     type="number"
-                    min="0"
                     step="any"
                     value={formTotal}
                     onChange={(e) => setFormTotal(e.target.value)}
