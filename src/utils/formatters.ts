@@ -2,6 +2,22 @@
  * Formatting utilities for currency, dates, numbers and visual styles
  */
 
+export const CONVERSION_SALE_AMOUNT = 250;
+
+export function getConversionSalesCount(totalAmount: number): number {
+  if (!Number.isFinite(totalAmount) || totalAmount < CONVERSION_SALE_AMOUNT) {
+    return 0;
+  }
+  return Math.floor((totalAmount + 1e-6) / CONVERSION_SALE_AMOUNT);
+}
+
+export function getLocalDateKey(date: Date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 const numberFormatter = new Intl.NumberFormat('es-CO', {
   maximumFractionDigits: 0,
 });

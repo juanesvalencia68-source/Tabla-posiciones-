@@ -19,7 +19,7 @@ import {
   Lock
 } from 'lucide-react';
 import { Agent, DepositMethod } from '../types';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, getConversionSalesCount, CONVERSION_SALE_AMOUNT } from '../utils/formatters';
 import { useFirebase } from '../contexts/FirebaseContext';
 
 interface AdminPanelProps {
@@ -41,6 +41,7 @@ interface AdminPanelProps {
 }
 
 const PRESET_AMOUNTS = [50000, 100000, 250000, 500000, 1000000];
+const CONVERSION_PRESET_AMOUNTS = [250, 500, 750, 1000, 1250];
 
 const COLOR_OPTIONS = [
   '#3B82F6', // Blue
@@ -86,6 +87,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Agent Management state
   const [searchTerm, setSearchTerm] = useState('');
+  const [agentListMode, setAgentListMode] = useState<'Separadas' | 'Retención' | 'Conversión' | 'Todas'>('Separadas');
   const [isCreating, setIsCreating] = useState(false);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
@@ -97,6 +99,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [formColor, setFormColor] = useState(COLOR_OPTIONS[0]);
   const [formDaily, setFormDaily] = useState('0');
   const [formTotal, setFormTotal] = useState('0');
+  const [baseTotalWithoutDaily, setBaseTotalWithoutDaily] = useState(0);
   const [formError, setFormError] = useState<string | null>(null);
 
   // Sync selectedAgentId if empty or not in depositAgents
@@ -112,6 +115,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const currentDepositAgent = agents.find((a) => a.id === selectedAgentId);
+  const isDepositConversion = currentDepositAgent
+    ? currentDepositAgent.branch === 'Conversión'
+    : depositAreaFilter === 'Conversión';
+  const activePresets = isDepositConversion ? CONVERSION_PRESET_AMOUNTS : PRESET_AMOUNTS;
   const parsedDepositAmount = parseFloat(depositAmount) || 0;
   const isNegativeInput = depositAmount.trim().startsWith('-') || parsedDepositAmount < 0;
 
@@ -152,10 +159,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setDepositError(null);
   };
 
-  const startCreate = () => {
+  const startCreate = (preferredBranch?: 'Retención' | 'Conversión') => {
     setEditingAgent(null);
     setFormName('');
-    const targetBranch = currentArea || 'Retención';
+    const targetBranch =
+      preferredBranch ||
+      (agentListMode === 'Retención' || agentListMode === 'Conversión' ? agentListMode : currentArea) ||
+      'Retención';
     const isConv = targetBranch === 'Conversión';
     const prefix = isConv ? 'CV' : 'AG';
     const existingInBranch = agents.filter((a) => a.branch === targetBranch).length;
@@ -164,6 +174,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setFormColor(isConv ? '#10B981' : COLOR_OPTIONS[agents.length % COLOR_OPTIONS.length]);
     setFormDaily('0');
     setFormTotal('0');
+    setBaseTotalWithoutDaily(0);
     setFormError(null);
     setIsCreating(true);
   };
@@ -177,7 +188,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setFormColor(agent.color);
     setFormDaily(String(agent.dailyTotal));
     setFormTotal(String(agent.grandTotal));
+    setBaseTotalWithoutDaily(agent.grandTotal - agent.dailyTotal);
     setFormError(null);
+  };
+
+  const handleFormDailyChange = (value: string) => {
+    setFormDaily(value);
+    if (formBranch !== 'Conversión') {
+      const parsedDaily = parseFloat(value);
+      const safeDaily = Number.isFinite(parsedDaily) ? parsedDaily : 0;
+      const nextTotal = Math.round((baseTotalWithoutDaily + safeDaily) * 100) / 100;
+      setFormTotal(String(nextTotal));
+    }
+  };
+
+  const handleFormTotalChange = (value: string) => {
+    setFormTotal(value);
+    const parsedTotal = parseFloat(value);
+    const parsedDaily = parseFloat(formDaily);
+    const safeTotal = Number.isFinite(parsedTotal) ? parsedTotal : 0;
+    const safeDaily = Number.isFinite(parsedDaily) ? parsedDaily : 0;
+    setBaseTotalWithoutDaily(Math.round((safeTotal - safeDaily) * 100) / 100);
   };
 
   const closeForm = () => {
@@ -233,6 +264,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       a.branch.toLowerCase().includes(searchTerm.toLowerCase()) ||
       a.code.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const retencionAgents = filteredAgents.filter((a) => a.branch === 'Retención');
+  const conversionAgents = filteredAgents.filter((a) => a.branch === 'Conversión');
+  const totalRetencionCount = agents.filter((a) => a.branch === 'Retención').length;
+  const totalConversionCount = agents.filter((a) => a.branch === 'Conversión').length;
 
   const deletingAgent = agents.find((a) => a.id === deletingAgentId);
 
@@ -348,7 +384,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </button>
 
           <button
-            onClick={startCreate}
+            onClick={() => startCreate()}
             className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-md active:scale-95 cursor-pointer"
           >
             <UserPlus className="w-4 h-4" />
@@ -430,9 +466,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 {currentDepositAgent && (
                   <div className="mt-2 p-2 bg-slate-950/70 border border-slate-800 rounded-lg text-xs text-slate-400 flex items-center justify-between">
                     <span>Acumulado actual:</span>
-                    <span className="font-mono text-slate-200 font-semibold tabular-nums">
-                      Hoy: {formatCurrency(currentDepositAgent.dailyTotal)}
-                    </span>
+                    {currentDepositAgent.branch === 'Conversión' ? (
+                      <span className="font-mono text-emerald-300 font-semibold tabular-nums">
+                        {getConversionSalesCount(currentDepositAgent.grandTotal)}{' '}
+                        {getConversionSalesCount(currentDepositAgent.grandTotal) === 1 ? 'venta' : 'ventas'} ·{' '}
+                        {formatCurrency(currentDepositAgent.grandTotal)}
+                      </span>
+                    ) : (
+                      <span className="font-mono text-slate-200 font-semibold tabular-nums">
+                        Hoy: {formatCurrency(currentDepositAgent.dailyTotal)}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -440,7 +484,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               {/* Amount Input */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Monto del Depósito ($) * <span className="text-[10px] font-normal text-slate-400 normal-case">(Acepta negativos)</span>
+                  Monto del Depósito ($) *{' '}
+                  <span className="text-[10px] font-normal text-slate-400 normal-case">
+                    {isDepositConversion ? '(Cada venta = $250 · Acepta negativos)' : '(Acepta negativos)'}
+                  </span>
                 </label>
                 <div className="relative flex items-center gap-2">
                   <div className="relative flex-1">
@@ -450,7 +497,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <input
                       type="number"
                       step="any"
-                      placeholder="Ej: 100000 o -50000"
+                      placeholder={isDepositConversion ? 'Ej: 250 (1 venta) o -250' : 'Ej: 100000 o -50000'}
                       value={depositAmount}
                       onChange={(e) => {
                         setDepositAmount(e.target.value);
@@ -479,20 +526,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                 {/* Preset shortcuts */}
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {PRESET_AMOUNTS.map((val) => (
-                    <button
-                      type="button"
-                      key={val}
-                      onClick={() => handleAddPreset(val)}
-                      className={`px-2 py-1 text-xs rounded-lg font-mono border transition-colors cursor-pointer ${
-                        isNegativeInput
-                          ? 'bg-rose-950/50 hover:bg-rose-900/60 text-rose-300 border-rose-800/60'
-                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700 hover:border-amber-500/50'
-                      }`}
-                    >
-                      {isNegativeInput ? '-' : '+'}{formatCurrency(val).replace('$ ', '')}
-                    </button>
-                  ))}
+                  {activePresets.map((val) => {
+                    const salesQty = val / CONVERSION_SALE_AMOUNT;
+                    return (
+                      <button
+                        type="button"
+                        key={val}
+                        onClick={() => handleAddPreset(val)}
+                        className={`px-2 py-1 text-xs rounded-lg font-mono border transition-colors cursor-pointer ${
+                          isNegativeInput
+                            ? 'bg-rose-950/50 hover:bg-rose-900/60 text-rose-300 border-rose-800/60'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700 hover:border-amber-500/50'
+                        }`}
+                      >
+                        {isNegativeInput ? '-' : '+'}
+                        {isDepositConversion
+                          ? `${salesQty}v ($${val})`
+                          : formatCurrency(val).replace('$ ', '')}
+                      </button>
+                    );
+                  })}
                   <button
                     type="button"
                     onClick={() => setDepositAmount('')}
@@ -540,14 +593,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
 
           <div className="pt-2 space-y-2.5">
-            <button
-              type="button"
-              onClick={onResetDaily}
-              className="w-full py-2.5 px-3 bg-slate-950 hover:bg-amber-500/10 text-slate-300 hover:text-amber-300 text-xs font-semibold rounded-xl border border-slate-800 hover:border-amber-500/30 flex items-center justify-center gap-2 transition-all cursor-pointer"
-            >
-              <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
-              <span>Reiniciar Depósitos Diarios a $0</span>
-            </button>
+            {currentArea !== 'Conversión' && (
+              <button
+                type="button"
+                onClick={onResetDaily}
+                className="w-full py-2.5 px-3 bg-slate-950 hover:bg-amber-500/10 text-slate-300 hover:text-amber-300 text-xs font-semibold rounded-xl border border-slate-800 hover:border-amber-500/30 flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                <span>Reiniciar Depósitos Diarios a $0</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -555,7 +610,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               className="w-full py-2.5 px-3 bg-slate-950 hover:bg-rose-500/10 text-slate-400 hover:text-rose-300 text-xs font-semibold rounded-xl border border-slate-800 hover:border-rose-500/30 flex items-center justify-center gap-2 transition-all cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-              <span>Reiniciar Depósitos Totales a $0</span>
+              <span>
+                {currentArea === 'Conversión'
+                  ? 'Reiniciar Total Ventas y Montos a $0'
+                  : 'Reiniciar Depósitos Totales a $0'}
+              </span>
             </button>
           </div>
         </div>
@@ -563,9 +622,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {/* SECTION 2: GESTIÓN DE AGENTES */}
       <div className="space-y-4">
-        {/* Search & Counter Bar */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-900 p-4 rounded-xl border border-slate-800">
-          <div className="relative w-full sm:w-80">
+        {/* Search, Area Separation Switcher & Counter Bar */}
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-slate-900 p-4 rounded-xl border border-slate-800">
+          <div className="relative w-full lg:w-72">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -576,105 +635,216 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             />
           </div>
 
-          <div className="text-xs text-slate-400 flex items-center gap-2 self-end sm:self-center">
+          {/* Area View / Separation Tabs */}
+          <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+            <button
+              type="button"
+              onClick={() => setAgentListMode('Separadas')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                agentListMode === 'Separadas'
+                  ? 'bg-amber-500 text-slate-950'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Separadas por Área
+            </button>
+            <button
+              type="button"
+              onClick={() => setAgentListMode('Retención')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                agentListMode === 'Retención'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              🏢 Retención ({totalRetencionCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setAgentListMode('Conversión')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                agentListMode === 'Conversión'
+                  ? 'bg-emerald-600 text-white'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              🎯 Conversión ({totalConversionCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setAgentListMode('Todas')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                agentListMode === 'Todas'
+                  ? 'bg-slate-700 text-white'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Todas ({agents.length})
+            </button>
+          </div>
+
+          <div className="text-xs text-slate-400 flex items-center gap-2 self-end lg:self-center">
             <Users className="w-4 h-4 text-blue-400" />
             <span>
-              Total de agentes registrados:{' '}
+              Total:{' '}
               <strong className="text-white font-bold">{agents.length}</strong>
             </span>
           </div>
         </div>
 
-        {/* Agents Management Table */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-slate-800 bg-slate-950/60 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                  <th className="py-3 px-4 w-12 text-center">#</th>
-                  <th className="py-3 px-4">Agente</th>
-                  <th className="py-3 px-4">Código</th>
-                  <th className="py-3 px-4">Área</th>
-                  <th className="py-3 px-4 text-right">Depósitos Diarios</th>
-                  <th className="py-3 px-4 text-right">Depósitos Totales</th>
-                  <th className="py-3 px-4 text-center w-28">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60 text-sm">
-                {filteredAgents.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="text-center py-12 text-slate-500 text-xs">
-                      No se encontraron agentes. Pulsa "+ Nuevo Agente" para crear uno.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredAgents.map((agent, index) => (
-                    <tr key={agent.id} className="hover:bg-slate-800/40 transition-colors">
-                      <td className="py-3.5 px-4 text-center text-xs text-slate-500 font-mono">
-                        {index + 1}
-                      </td>
+        {/* Agents Management Table(s) */}
+        {(agentListMode === 'Separadas'
+          ? ([
+              { key: 'Retención', title: 'Área de Retención', area: 'Retención' as const, list: retencionAgents },
+              { key: 'Conversión', title: 'Área de Conversión', area: 'Conversión' as const, list: conversionAgents },
+            ])
+          : agentListMode === 'Retención'
+          ? [{ key: 'Retención', title: 'Área de Retención', area: 'Retención' as const, list: retencionAgents }]
+          : agentListMode === 'Conversión'
+          ? [{ key: 'Conversión', title: 'Área de Conversión', area: 'Conversión' as const, list: conversionAgents }]
+          : [{ key: 'Todas', title: 'Todos los Agentes', area: undefined, list: filteredAgents }]
+        ).map((group) => {
+          const isConvGroup = group.area === 'Conversión';
+          const isRetGroup = group.area === 'Retención';
+          return (
+            <div key={group.key} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+              {group.area && (
+                <div
+                  className={`px-4 py-3 border-b border-slate-800 flex items-center justify-between gap-2 ${
+                    isConvGroup ? 'bg-emerald-950/30' : 'bg-blue-950/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">{isConvGroup ? '🎯' : '🏢'}</span>
+                    <h4 className={`text-xs sm:text-sm font-extrabold uppercase tracking-wider ${isConvGroup ? 'text-emerald-300' : 'text-blue-300'}`}>
+                      {group.title}
+                    </h4>
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-slate-950 text-slate-300 border border-slate-800">
+                      {group.list.length} {group.list.length === 1 ? 'agente' : 'agentes'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => startCreate(group.area)}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
+                      isConvGroup
+                        ? 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30'
+                        : 'bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30'
+                    }`}
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>+ Añadir a {group.area}</span>
+                  </button>
+                </div>
+              )}
 
-                      {/* Agent Name & Avatar */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-2.5">
-                          <div
-                            className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs text-slate-300 shrink-0 bg-slate-800 border border-slate-700/80"
-                          >
-                            {agent.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
-                          </div>
-                          <span className="font-bold text-white truncate">{agent.name}</span>
-                        </div>
-                      </td>
-
-                      {/* Code */}
-                      <td className="py-3.5 px-4 font-mono text-xs text-slate-300">
-                        {agent.code}
-                      </td>
-
-                      {/* Branch */}
-                      <td className="py-3.5 px-4 text-xs text-slate-300">
-                        <div className="flex items-center gap-1.5">
-                          <Building2 className="w-3.5 h-3.5 text-slate-500" />
-                          <span>{agent.branch}</span>
-                        </div>
-                      </td>
-
-                      {/* Daily amount */}
-                      <td className="py-3.5 px-4 text-right font-mono font-semibold text-xs text-slate-200 tabular-nums">
-                        {formatCurrency(agent.dailyTotal)}
-                      </td>
-
-                      {/* Total amount */}
-                      <td className="py-3.5 px-4 text-right font-mono font-bold text-xs text-amber-300 tabular-nums">
-                        {formatCurrency(agent.grandTotal)}
-                      </td>
-
-                      {/* Action buttons: Edit & Delete */}
-                      <td className="py-3.5 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            onClick={() => startEdit(agent)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-                            title="Editar Agente"
-                          >
-                            <Pencil className="w-4 h-4 text-blue-400" />
-                          </button>
-                          <button
-                            onClick={() => setDeletingAgentId(agent.id)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors cursor-pointer"
-                            title="Eliminar Agente"
-                          >
-                            <Trash2 className="w-4 h-4 text-rose-400" />
-                          </button>
-                        </div>
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 bg-slate-950/60 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                      <th className="py-3 px-4 w-12 text-center">#</th>
+                      <th className="py-3 px-4">Agente</th>
+                      <th className="py-3 px-4">Código</th>
+                      {!group.area && <th className="py-3 px-4">Área</th>}
+                      <th className="py-3 px-4 text-right">
+                        {isConvGroup
+                          ? 'Total Ventas ($250 c/u)'
+                          : isRetGroup
+                          ? 'Depósitos Diarios'
+                          : 'Diario / Ventas'}
+                      </th>
+                      <th className="py-3 px-4 text-right">
+                        {isRetGroup ? 'Depósitos Totales' : 'Total ($)'}
+                      </th>
+                      <th className="py-3 px-4 text-center w-28">Acciones</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 text-sm">
+                    {group.list.length === 0 ? (
+                      <tr>
+                        <td colSpan={group.area ? 6 : 7} className="text-center py-10 text-slate-500 text-xs">
+                          No se encontraron agentes{group.area ? ` en ${group.area}` : ''}. Pulsa "+ Añadir" para crear uno.
+                        </td>
+                      </tr>
+                    ) : (
+                      group.list.map((agent, index) => (
+                        <tr key={agent.id} className="hover:bg-slate-800/40 transition-colors">
+                          <td className="py-3.5 px-4 text-center text-xs text-slate-500 font-mono">
+                            {index + 1}
+                          </td>
+
+                          {/* Agent Name & Avatar */}
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-2.5">
+                              <div
+                                className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs text-slate-300 shrink-0 bg-slate-800 border border-slate-700/80"
+                              >
+                                {agent.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
+                              </div>
+                              <span className="font-bold text-white truncate">{agent.name}</span>
+                            </div>
+                          </td>
+
+                          {/* Code */}
+                          <td className="py-3.5 px-4 font-mono text-xs text-slate-300">
+                            {agent.code}
+                          </td>
+
+                          {/* Branch (only in combined 'Todas' view) */}
+                          {!group.area && (
+                            <td className="py-3.5 px-4 text-xs text-slate-300">
+                              <div className="flex items-center gap-1.5">
+                                <Building2 className="w-3.5 h-3.5 text-slate-500" />
+                                <span>{agent.branch}</span>
+                              </div>
+                            </td>
+                          )}
+
+                          {/* Daily amount (Retención) OR Total Ventas (Conversión) */}
+                          <td className="py-3.5 px-4 text-right font-mono font-semibold text-xs tabular-nums">
+                            {agent.branch === 'Conversión' ? (
+                              <span className="text-emerald-400 font-bold">
+                                {getConversionSalesCount(agent.grandTotal)}{' '}
+                                {getConversionSalesCount(agent.grandTotal) === 1 ? 'venta' : 'ventas'}
+                              </span>
+                            ) : (
+                              <span className="text-slate-200">{formatCurrency(agent.dailyTotal)}</span>
+                            )}
+                          </td>
+
+                          {/* Total amount */}
+                          <td className="py-3.5 px-4 text-right font-mono font-bold text-xs text-amber-300 tabular-nums">
+                            {formatCurrency(agent.grandTotal)}
+                          </td>
+
+                          {/* Action buttons: Edit & Delete */}
+                          <td className="py-3.5 px-4 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                onClick={() => startEdit(agent)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                                title="Editar Agente"
+                              >
+                                <Pencil className="w-4 h-4 text-blue-400" />
+                              </button>
+                              <button
+                                onClick={() => setDeletingAgentId(agent.id)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors cursor-pointer"
+                                title="Eliminar Agente"
+                              >
+                                <Trash2 className="w-4 h-4 text-rose-400" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Modal / Form for Add / Edit Agent */}
@@ -767,15 +937,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-800">
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1">
-                    Monto Diario ($)
+                    {formBranch === 'Conversión' ? 'Monto Diario (N/A en Conv.)' : 'Monto Diario ($)'}
                   </label>
                   <input
                     type="number"
                     step="any"
                     value={formDaily}
-                    onChange={(e) => setFormDaily(e.target.value)}
+                    onChange={(e) => handleFormDailyChange(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs font-mono text-white outline-none focus:border-amber-500"
                   />
+                  {formBranch !== 'Conversión' && (
+                    <span className="text-[11px] text-blue-400 mt-1 block">
+                      Ajusta el Total automáticamente
+                    </span>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1">
@@ -785,9 +960,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     type="number"
                     step="any"
                     value={formTotal}
-                    onChange={(e) => setFormTotal(e.target.value)}
+                    onChange={(e) => handleFormTotalChange(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs font-mono text-white outline-none focus:border-amber-500"
                   />
+                  {formBranch === 'Conversión' && (
+                    <span className="text-[11px] text-emerald-400 font-mono mt-1 block">
+                      = {getConversionSalesCount(parseFloat(formTotal) || 0)} ventas (${CONVERSION_SALE_AMOUNT} c/u)
+                    </span>
+                  )}
                 </div>
               </div>
 

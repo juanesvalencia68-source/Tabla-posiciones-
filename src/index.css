@@ -40,6 +40,22 @@ html, body {
   will-change: transform;
 }
 
+/* Pure CSS 8s countdown progress bar for centered DepositNotification banner */
+@keyframes progress-countdown-8s {
+  0% {
+    transform: scaleX(1);
+  }
+  100% {
+    transform: scaleX(0);
+  }
+}
+
+.animate-countdown-8s {
+  transform-origin: left center;
+  animation: progress-countdown-8s 8s linear forwards;
+  will-change: transform;
+}
+
 /* Pure CSS toast entrance for TV */
 @keyframes tv-toast-in {
   0% {

@@ -2,7 +2,7 @@ import React, { useEffect, memo } from 'react';
 import confetti from 'canvas-confetti';
 import { Crown, X, TrendingUp } from 'lucide-react';
 import { Top1OvertakeEvent } from '../types';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, getConversionSalesCount } from '../utils/formatters';
 
 interface CelebrationModalProps {
   event: Top1OvertakeEvent | null;
@@ -51,10 +51,16 @@ export const CelebrationModal: React.FC<CelebrationModalProps> = memo(({ event, 
   if (!event) return null;
 
   const { agent, newAmount, view, previousLeaderName } = event;
-  const viewLabel = view === 'daily' ? 'Ranking Diario' : 'Ranking Total';
+  const isConversion = agent.branch === 'Conversión';
+  const viewLabel = isConversion
+    ? 'Ranking Total Ventas'
+    : view === 'daily'
+    ? 'Ranking Diario'
+    : 'Ranking Total';
+  const salesCount = isConversion ? getConversionSalesCount(newAmount) : 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 select-none">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/90 select-none">
       <div className="animate-tv-modal relative w-full max-w-lg p-6 sm:p-8 bg-slate-900 border-2 border-amber-500 rounded-2xl text-center overflow-hidden shadow-2xl">
         {/* Close button */}
         <button
@@ -106,10 +112,23 @@ export const CelebrationModal: React.FC<CelebrationModalProps> = memo(({ event, 
           </div>
 
           <div className="text-right shrink-0">
-            <span className="text-xs text-amber-400 font-medium block">Nuevo Total</span>
-            <span className="text-lg sm:text-xl font-mono font-bold text-white tabular-nums">
-              {formatCurrency(newAmount)}
+            <span className="text-xs text-amber-400 font-medium block">
+              {isConversion ? 'Total Ventas' : 'Nuevo Total'}
             </span>
+            {isConversion ? (
+              <div>
+                <span className="text-lg sm:text-xl font-mono font-bold text-white tabular-nums block">
+                  {salesCount} {salesCount === 1 ? 'venta' : 'ventas'}
+                </span>
+                <span className="text-xs font-mono text-emerald-300 tabular-nums">
+                  {formatCurrency(newAmount)}
+                </span>
+              </div>
+            ) : (
+              <span className="text-lg sm:text-xl font-mono font-bold text-white tabular-nums">
+                {formatCurrency(newAmount)}
+              </span>
+            )}
           </div>
         </div>
 

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
 import { Crown, ArrowDown, Play, Pause, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Agent, RankingView } from '../types';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, getConversionSalesCount, CONVERSION_SALE_AMOUNT } from '../utils/formatters';
 
 interface SimpleLeaderboardTableProps {
   agents: Agent[];
+  area: 'Retención' | 'Conversión';
   sortBy: RankingView;
   onToggleSort: (view: RankingView) => void;
   onSelectAgentForDeposit?: (agent: Agent) => void;
@@ -14,15 +15,18 @@ interface RowProps {
   agent: Agent;
   index: number;
   rank: number;
+  area: 'Retención' | 'Conversión';
   sortBy: RankingView;
   onSelectAgentForDeposit?: (agent: Agent) => void;
 }
 
 // Memoized Leaderboard Row: Top 3 in Gold, #4-#10 in standout bright Blue, large high-impact TV typography
 const LeaderboardRow = memo(
-  ({ agent, index, rank, sortBy, onSelectAgentForDeposit }: RowProps) => {
+  ({ agent, index, rank, area, sortBy, onSelectAgentForDeposit }: RowProps) => {
     const isTop1 = rank === 1;
     const isTop3 = rank <= 3;
+    const isConversion = area === 'Conversión';
+    const salesCount = isConversion ? getConversionSalesCount(agent.grandTotal) : 0;
 
     // Top 3 = Gold theme; #4-#10 = Standout bright Blue theme
     const rowClasses = isTop3
@@ -102,28 +106,43 @@ const LeaderboardRow = memo(
           </div>
         </td>
 
-        {/* Daily Deposits */}
+        {/* Daily Deposits (Retención) OR Total Ventas (Conversión) */}
         <td className="py-3 sm:py-4 xl:py-5 px-3 sm:px-6 text-right">
-          <span
-            className={`font-mono tabular-nums ${
-              sortBy === 'daily'
-                ? isTop3
-                  ? 'text-amber-300 font-black text-xl sm:text-3xl xl:text-4xl'
-                  : 'text-sky-300 font-black text-xl sm:text-3xl xl:text-4xl'
-                : isTop3
-                ? 'text-amber-300/85 font-bold text-lg sm:text-2xl xl:text-3xl'
-                : 'text-sky-200/85 font-bold text-lg sm:text-2xl xl:text-3xl'
-            }`}
-          >
-            {formatCurrency(agent.dailyTotal)}
-          </span>
+          {isConversion ? (
+            <div className="inline-flex items-baseline justify-end gap-2">
+              <span
+                className={`font-mono tabular-nums font-black text-xl sm:text-3xl xl:text-4xl ${
+                  isTop3 ? 'text-amber-300' : 'text-sky-300'
+                }`}
+              >
+                {salesCount}
+              </span>
+              <span
+                className={`text-sm sm:text-lg xl:text-xl font-bold uppercase tracking-wide ${
+                  isTop3 ? 'text-amber-200/85' : 'text-sky-200/85'
+                }`}
+              >
+                {salesCount === 1 ? 'venta' : 'ventas'}
+              </span>
+            </div>
+          ) : (
+            <span
+              className={`font-mono tabular-nums ${
+                isTop3
+                  ? 'text-amber-300/90 font-bold text-lg sm:text-2xl xl:text-3xl'
+                  : 'text-sky-200/90 font-bold text-lg sm:text-2xl xl:text-3xl'
+              }`}
+            >
+              {formatCurrency(agent.dailyTotal)}
+            </span>
+          )}
         </td>
 
-        {/* Total Deposits */}
+        {/* Total Deposits (Primary Ranking Metric in Retención) */}
         <td className="py-3 sm:py-4 xl:py-5 px-3 sm:px-6 text-right">
           <span
             className={`font-mono tabular-nums ${
-              sortBy === 'total'
+              !isConversion
                 ? isTop3
                   ? 'text-amber-300 font-black text-xl sm:text-3xl xl:text-4xl'
                   : 'text-sky-300 font-black text-xl sm:text-3xl xl:text-4xl'
@@ -146,6 +165,7 @@ const LeaderboardRow = memo(
       prev.agent.name === next.agent.name &&
       prev.rank === next.rank &&
       prev.index === next.index &&
+      prev.area === next.area &&
       prev.sortBy === next.sortBy
     );
   }
@@ -155,10 +175,12 @@ LeaderboardRow.displayName = 'LeaderboardRow';
 
 export const SimpleLeaderboardTable: React.FC<SimpleLeaderboardTableProps> = memo(({
   agents,
+  area,
   sortBy,
   onToggleSort,
   onSelectAgentForDeposit,
 }) => {
+  const isConversion = area === 'Conversión';
   const [isAutoRotating, setIsAutoRotating] = useState(true);
   const [pageSize, setPageSize] = useState<number>(() => {
     try {
@@ -235,6 +257,16 @@ export const SimpleLeaderboardTable: React.FC<SimpleLeaderboardTableProps> = mem
     setProgressKey((k) => k + 1);
   };
 
+  // Sum of grandTotal across ALL agents in this area (not just Top 10)
+  const allAreaGrandTotal = useMemo(
+    () =>
+      agents.reduce(
+        (sum, ag) => sum + (Number.isFinite(ag.grandTotal) ? ag.grandTotal : 0),
+        0
+      ),
+    [agents]
+  );
+
   // Slice displayed agents for current page within Top 10
   const displayedAgents = useMemo(() => {
     if (pageSize === 0) {
@@ -250,33 +282,47 @@ export const SimpleLeaderboardTable: React.FC<SimpleLeaderboardTableProps> = mem
     <div className="flex-1 flex flex-col w-full">
       {/* Main Full-Bleed Leaderboard Table Container */}
       <div className="flex-1 flex flex-col w-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-        {/* TV Broadcast Rotation Bar & Page Navigation */}
+        {/* TV Broadcast Bar: Total Total (Retención) / Rotation Toggle (Conversión) & Page Navigation */}
         <div className="bg-slate-950 px-4 py-2.5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm xl:text-base">
-          {/* Left: TV Auto-Rotation Status Toggle & Page Buttons */}
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Left: Total Total Box (Retención) or Auto-Rotation Toggle (Conversión) + Page Buttons */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {!isConversion && (
+              <div className="inline-flex items-center gap-3 px-4 py-1.5 rounded-xl bg-amber-500/15 border-2 border-amber-400/60 select-none">
+                <span className="text-xs sm:text-sm xl:text-base font-extrabold uppercase tracking-wider text-amber-200">
+                  Total Total
+                </span>
+                <span className="h-5 w-px bg-amber-400/40" aria-hidden="true" />
+                <span className="font-mono font-black tabular-nums text-lg sm:text-2xl xl:text-3xl text-amber-300 leading-none">
+                  {formatCurrency(allAreaGrandTotal)}
+                </span>
+              </div>
+            )}
+
             {pageSize > 0 && totalPages > 1 && (
               <>
-                <button
-                  onClick={handleToggleAutoRotate}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm xl:text-base font-bold transition-colors cursor-pointer select-none ${
-                    isAutoRotating
-                      ? 'bg-amber-500/15 text-amber-300 border border-amber-500/40 hover:bg-amber-500/25'
-                      : 'bg-slate-800 text-slate-400 border border-slate-700 hover:text-white'
-                  }`}
-                  title={isAutoRotating ? 'Pausar rotación automática' : 'Reanudar rotación automática en TV (cada 15s)'}
-                >
-                  {isAutoRotating ? (
-                    <>
-                      <Pause className="w-4 h-4 text-amber-400" />
-                      <span>Rotación 15s</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-4 h-4 text-slate-400" />
-                      <span>Pausada</span>
-                    </>
-                  )}
-                </button>
+                {isConversion && (
+                  <button
+                    onClick={handleToggleAutoRotate}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm xl:text-base font-bold transition-colors cursor-pointer select-none ${
+                      isAutoRotating
+                        ? 'bg-amber-500/15 text-amber-300 border border-amber-500/40 hover:bg-amber-500/25'
+                        : 'bg-slate-800 text-slate-400 border border-slate-700 hover:text-white'
+                    }`}
+                    title={isAutoRotating ? 'Pausar rotación automática' : 'Reanudar rotación automática en TV (cada 15s)'}
+                  >
+                    {isAutoRotating ? (
+                      <>
+                        <Pause className="w-4 h-4 text-amber-400" />
+                        <span>Rotación 15s</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-4 h-4 text-slate-400" />
+                        <span>Pausada</span>
+                      </>
+                    )}
+                  </button>
+                )}
 
                 {/* Page Buttons with Range Info */}
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -317,7 +363,7 @@ export const SimpleLeaderboardTable: React.FC<SimpleLeaderboardTableProps> = mem
                 </div>
               </>
             )}
-            {(pageSize === 0 || totalPages <= 1) && (
+            {isConversion && (pageSize === 0 || totalPages <= 1) && (
               <span className="text-xs sm:text-sm xl:text-base text-amber-300 font-bold px-1">
                 Top {top10Agents.length} Mejores Agentes
               </span>
@@ -372,24 +418,40 @@ export const SimpleLeaderboardTable: React.FC<SimpleLeaderboardTableProps> = mem
               <tr className="border-b border-slate-800 bg-slate-950 text-xs sm:text-base xl:text-lg font-extrabold text-slate-300 uppercase tracking-wider">
                 <th className="py-3 px-3 sm:px-6 text-center">Pos</th>
                 <th className="py-3 px-3 sm:px-6">Agente</th>
-                <th
-                  onClick={() => onToggleSort('daily')}
-                  className="py-3 px-3 sm:px-6 text-right cursor-pointer hover:text-amber-400 transition-colors select-none"
-                >
-                  <div className="inline-flex items-center gap-1.5 justify-end">
-                    <span>Diario</span>
-                    {sortBy === 'daily' && <ArrowDown className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />}
-                  </div>
-                </th>
-                <th
-                  onClick={() => onToggleSort('total')}
-                  className="py-3 px-3 sm:px-6 text-right cursor-pointer hover:text-amber-400 transition-colors select-none"
-                >
-                  <div className="inline-flex items-center gap-1.5 justify-end">
-                    <span>Total</span>
-                    {sortBy === 'total' && <ArrowDown className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />}
-                  </div>
-                </th>
+                {isConversion ? (
+                  <th className="py-3 px-3 sm:px-6 text-right select-none">
+                    <div className="inline-flex items-center gap-1.5 justify-end">
+                      <span>Total Ventas</span>
+                      <span className="hidden sm:inline text-[11px] font-bold text-emerald-400 normal-case tracking-normal">
+                        (${CONVERSION_SALE_AMOUNT} c/u)
+                      </span>
+                      <ArrowDown className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />
+                    </div>
+                  </th>
+                ) : (
+                  <th className="py-3 px-3 sm:px-6 text-right select-none">
+                    <div className="inline-flex items-center gap-1.5 justify-end">
+                      <span>Diario</span>
+                    </div>
+                  </th>
+                )}
+                {isConversion ? (
+                  <th className="py-3 px-3 sm:px-6 text-right select-none">
+                    <div className="inline-flex items-center gap-1.5 justify-end">
+                      <span>Total</span>
+                    </div>
+                  </th>
+                ) : (
+                  <th
+                    onClick={() => onToggleSort('total')}
+                    className="py-3 px-3 sm:px-6 text-right select-none"
+                  >
+                    <div className="inline-flex items-center gap-1.5 justify-end">
+                      <span>Total</span>
+                      <ArrowDown className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />
+                    </div>
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody key={currentPage} className="animate-tv-page divide-y divide-slate-800">
@@ -406,6 +468,7 @@ export const SimpleLeaderboardTable: React.FC<SimpleLeaderboardTableProps> = mem
                     agent={agent}
                     index={index}
                     rank={pageStartOffset + index + 1}
+                    area={area}
                     sortBy={sortBy}
                     onSelectAgentForDeposit={onSelectAgentForDeposit}
                   />

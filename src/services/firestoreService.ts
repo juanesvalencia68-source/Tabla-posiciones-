@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocFromServer,
   getDocsFromServer,
   onSnapshot,
   query,
@@ -17,6 +18,7 @@ import {
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { Agent, DepositMethod, RankingView, Top1OvertakeEvent } from '../types';
 import { INITIAL_AGENTS, saveAgents } from '../utils/storage';
+import { getConversionSalesCount, getLocalDateKey } from '../utils/formatters';
 
 // Volumetric boundaries synchronized verbatim with firebase-blueprint.json
 const MAX_ID_LEN = 64;
@@ -121,14 +123,23 @@ export function subscribeAgentsFromFirestore(
   );
 }
 
+function getBoardEventDocId(branch: 'Retención' | 'Conversión' | 'Todas'): string {
+  if (branch === 'Conversión') return 'latest_conversion';
+  if (branch === 'Retención') return 'latest_retencion';
+  return 'latest';
+}
+
 /**
- * Subscribe to /board_events/latest so Smart TVs play coin sound, toast & Top-1 celebration.
+ * Subscribe to area-specific /board_events/latest_{area} so Smart TVs play coin sound,
+ * centered banner & Top-1 celebration ONLY for the active area (Retención or Conversión).
  * Ignores the very first initial snapshot so refreshing a TV never replays stale alerts.
  */
 export function subscribeLatestBoardEvent(
+  area: 'Retención' | 'Conversión',
   onEvent: (event: LiveBoardEventPayload) => void
 ): () => void {
-  const eventRef = doc(db, 'board_events', 'latest');
+  const docId = getBoardEventDocId(area);
+  const eventRef = doc(db, 'board_events', docId);
   let initialized = false;
   let lastSeenSeq = 0;
 
@@ -149,7 +160,7 @@ export function subscribeLatestBoardEvent(
         return;
       }
 
-      if (seq > lastSeenSeq) {
+      if (seq > lastSeenSeq && (d.branch === area || d.branch === 'Todas')) {
         lastSeenSeq = seq;
         onEvent({
           id: snap.id,
@@ -166,7 +177,7 @@ export function subscribeLatestBoardEvent(
       }
     },
     (error) => {
-      handleFirestoreError(error, OperationType.GET, 'board_events/latest');
+      handleFirestoreError(error, OperationType.GET, `board_events/${docId}`);
     }
   );
 }
@@ -235,13 +246,14 @@ async function writeLatestBoardEventToBatch(
     view?: RankingView;
   }
 ) {
-  const eventRef = doc(db, 'board_events', 'latest');
+  const eventDocId = getBoardEventDocId(payload.branch);
+  const eventRef = doc(db, 'board_events', eventDocId);
   const snap = await getDoc(eventRef);
   const seq = Date.now();
 
   if (!snap.exists()) {
     const createData: Record<string, unknown> = {
-      id: 'latest',
+      id: eventDocId,
       type: payload.type,
       branch: payload.branch,
       agentName: sanitizeString(payload.agentName, MAX_NAME_LEN, 'Sistema'),
@@ -280,6 +292,69 @@ async function writeLatestBoardEventToBatch(
   }
 }
 
+/**
+ * Automatically resets Retención daily totals (dailyTotal & dailyDepositCount) to 0
+ * once per calendar day when a new day / shift begins, preserving grandTotal.
+ */
+export async function ensureRetencionDailyResetFirestore(allAgents: Agent[]): Promise<boolean> {
+  const retencionAgents = allAgents.filter((a) => sanitizeBranch(a.branch) === 'Retención');
+  if (retencionAgents.length === 0) return false;
+
+  const todayKey = getLocalDateKey();
+  const settingRef = doc(db, 'board_settings', 'retencion_daily');
+
+  try {
+    const snap = await getDocFromServer(settingRef);
+    if (snap.exists() && snap.data().lastResetDate === todayKey) {
+      return false;
+    }
+
+    const batch = writeBatch(db);
+
+    if (snap.exists()) {
+      for (const ag of retencionAgents) {
+        if (ag.dailyTotal !== 0 || ag.dailyDepositCount !== 0) {
+          batch.update(doc(db, 'agents', ag.id), {
+            dailyTotal: 0,
+            dailyDepositCount: 0,
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+      batch.update(settingRef, {
+        lastResetDate: todayKey,
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      for (const ag of retencionAgents) {
+        const depositedToday = Boolean(
+          ag.lastDepositAt && getLocalDateKey(new Date(ag.lastDepositAt)) === todayKey
+        );
+        if (!depositedToday && (ag.dailyTotal !== 0 || ag.dailyDepositCount !== 0)) {
+          batch.update(doc(db, 'agents', ag.id), {
+            dailyTotal: 0,
+            dailyDepositCount: 0,
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+      batch.set(settingRef, {
+        id: 'retencion_daily',
+        branch: 'Retención',
+        lastResetDate: todayKey,
+        isPublic: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
+
+    await batch.commit();
+    return true;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, 'board_settings/retencion_daily');
+  }
+}
+
 export async function submitDepositFirestore(params: {
   agentId: string;
   amount: number;
@@ -299,35 +374,83 @@ export async function submitDepositFirestore(params: {
   }
 
   const branch = sanitizeBranch(targetAgent.branch);
+  const isConversion = branch === 'Conversión';
   const branchBefore = params.allAgents.filter((a) => sanitizeBranch(a.branch) === branch);
-  const previousDailyLeader = [...branchBefore].sort((a, b) => b.dailyTotal - a.dailyTotal)[0];
+
+  // Check if Retención is rolling over into a new calendar day
+  const todayKey = getLocalDateKey();
+  let retencionSettingExists = true;
+  let needsRetencionRollover = false;
+
+  if (!isConversion) {
+    const settingRef = doc(db, 'board_settings', 'retencion_daily');
+    try {
+      const settingSnap = await getDocFromServer(settingRef);
+      retencionSettingExists = settingSnap.exists();
+      if (!settingSnap.exists() || settingSnap.data().lastResetDate !== todayKey) {
+        needsRetencionRollover = true;
+      }
+    } catch {
+      // Fallback: let deposit proceed if server check temporarily fails
+    }
+  }
+
+  const sortBranchAgents = (list: Agent[]) =>
+    [...list].sort((a, b) => {
+      if (isConversion) {
+        const salesDiff = getConversionSalesCount(b.grandTotal) - getConversionSalesCount(a.grandTotal);
+        if (salesDiff !== 0) return salesDiff;
+        return b.grandTotal - a.grandTotal;
+      }
+      // Retención: Top 1 is always whoever has the most accumulated in Total (grandTotal)
+      const totalDiff = b.grandTotal - a.grandTotal;
+      if (totalDiff !== 0) return totalDiff;
+      return b.dailyTotal - a.dailyTotal;
+    });
+
+  const previousLeader = sortBranchAgents(branchBefore)[0];
+
+  const targetDepositedToday = Boolean(
+    targetAgent.lastDepositAt && getLocalDateKey(new Date(targetAgent.lastDepositAt)) === todayKey
+  );
+  const resetTargetDaily =
+    !isConversion && needsRetencionRollover && (retencionSettingExists || !targetDepositedToday);
+
+  const baseDailyTotal = resetTargetDaily ? 0 : targetAgent.dailyTotal;
+  const baseDailyCount = resetTargetDaily ? 0 : targetAgent.dailyDepositCount;
 
   const nowIso = new Date().toISOString().slice(0, MAX_LAST_DEPOSIT_LEN);
   const updatedAgent: Agent = {
     ...targetAgent,
-    dailyTotal: targetAgent.dailyTotal + numAmount,
+    dailyTotal: baseDailyTotal + numAmount,
     grandTotal: targetAgent.grandTotal + numAmount,
-    dailyDepositCount: targetAgent.dailyDepositCount + 1,
+    dailyDepositCount: baseDailyCount + 1,
     totalDepositCount: targetAgent.totalDepositCount + 1,
     lastDepositAt: nowIso,
   };
 
   const branchAfter = branchBefore.map((a) => (a.id === updatedAgent.id ? updatedAgent : a));
-  const newDailyLeader = [...branchAfter].sort((a, b) => b.dailyTotal - a.dailyTotal)[0];
+  const newLeader = sortBranchAgents(branchAfter)[0];
 
   let overtakeEvent: Top1OvertakeEvent | null = null;
+  const hasImprovedLead = isConversion
+    ? getConversionSalesCount(updatedAgent.grandTotal) > getConversionSalesCount(previousLeader?.grandTotal || 0) ||
+      (getConversionSalesCount(updatedAgent.grandTotal) === getConversionSalesCount(previousLeader?.grandTotal || 0) &&
+        updatedAgent.grandTotal > (previousLeader?.grandTotal || 0))
+    : updatedAgent.grandTotal > (previousLeader?.grandTotal || 0);
+
   if (
     numAmount > 0 &&
-    newDailyLeader &&
-    newDailyLeader.id === updatedAgent.id &&
-    (!previousDailyLeader || previousDailyLeader.id !== updatedAgent.id) &&
-    updatedAgent.dailyTotal > (previousDailyLeader?.dailyTotal || 0)
+    newLeader &&
+    newLeader.id === updatedAgent.id &&
+    (!previousLeader || previousLeader.id !== updatedAgent.id) &&
+    hasImprovedLead
   ) {
     overtakeEvent = {
       agent: updatedAgent,
-      previousLeaderName: previousDailyLeader?.name,
-      newAmount: updatedAgent.dailyTotal,
-      view: 'daily',
+      previousLeaderName: previousLeader?.name,
+      newAmount: updatedAgent.grandTotal,
+      view: 'total',
       timestamp: Date.now(),
     };
   }
@@ -341,6 +464,40 @@ export async function submitDepositFirestore(params: {
 
   try {
     const batch = writeBatch(db);
+
+    if (!isConversion && needsRetencionRollover) {
+      for (const ag of branchBefore) {
+        if (ag.id === targetAgent.id) continue;
+        const agDepositedToday = Boolean(
+          ag.lastDepositAt && getLocalDateKey(new Date(ag.lastDepositAt)) === todayKey
+        );
+        const shouldResetOther = retencionSettingExists || !agDepositedToday;
+        if (shouldResetOther && (ag.dailyTotal !== 0 || ag.dailyDepositCount !== 0)) {
+          batch.update(doc(db, 'agents', ag.id), {
+            dailyTotal: 0,
+            dailyDepositCount: 0,
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+
+      const settingRef = doc(db, 'board_settings', 'retencion_daily');
+      if (retencionSettingExists) {
+        batch.update(settingRef, {
+          lastResetDate: todayKey,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        batch.set(settingRef, {
+          id: 'retencion_daily',
+          branch: 'Retención',
+          lastResetDate: todayKey,
+          isPublic: true,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    }
 
     const agentRef = doc(db, 'agents', targetAgent.id);
     batch.update(agentRef, {
@@ -379,7 +536,7 @@ export async function submitDepositFirestore(params: {
       amount: numAmount,
       overtake: Boolean(overtakeEvent),
       previousLeaderName: overtakeEvent?.previousLeaderName,
-      view: 'daily',
+      view: 'total',
     });
 
     await batch.commit();
@@ -470,6 +627,26 @@ export async function resetDailyFirestore(
         updatedAt: serverTimestamp(),
       });
     }
+    if (branch === 'Retención') {
+      const todayKey = getLocalDateKey();
+      const settingRef = doc(db, 'board_settings', 'retencion_daily');
+      const settingSnap = await getDocFromServer(settingRef);
+      if (settingSnap.exists()) {
+        batch.update(settingRef, {
+          lastResetDate: todayKey,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        batch.set(settingRef, {
+          id: 'retencion_daily',
+          branch: 'Retención',
+          lastResetDate: todayKey,
+          isPublic: true,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    }
     await writeLatestBoardEventToBatch(batch, {
       type: 'reset_daily',
       branch,
@@ -499,6 +676,26 @@ export async function resetTotalFirestore(
         lastDepositAt: deleteField(),
         updatedAt: serverTimestamp(),
       });
+    }
+    if (branch === 'Retención') {
+      const todayKey = getLocalDateKey();
+      const settingRef = doc(db, 'board_settings', 'retencion_daily');
+      const settingSnap = await getDocFromServer(settingRef);
+      if (settingSnap.exists()) {
+        batch.update(settingRef, {
+          lastResetDate: todayKey,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        batch.set(settingRef, {
+          id: 'retencion_daily',
+          branch: 'Retención',
+          lastResetDate: todayKey,
+          isPublic: true,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
     }
     await writeLatestBoardEventToBatch(batch, {
       type: 'reset_total',

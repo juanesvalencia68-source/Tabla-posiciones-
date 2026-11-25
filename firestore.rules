@@ -90,6 +90,21 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidBoardSetting(data) {
+      return data.keys().hasAll([
+          'id', 'branch', 'lastResetDate', 'isPublic', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'branch', 'lastResetDate', 'isPublic', 'createdAt', 'updatedAt'
+        ])
+        && data.id is string && data.id.size() >= 1 && data.id.size() <= 64 && data.id.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.branch is string && data.branch.size() <= 20 && data.branch in ['Retención', 'Conversión']
+        && data.lastResetDate is string && data.lastResetDate.size() == 10 && data.lastResetDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.isPublic is bool && data.isPublic == true
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
     // --- Collection Rules (Strict Schema, Size Bounds, Action Branches, and Temporal Integrity) ---
 
     // 1. Agents (Non-PII leaderboard rows)
@@ -168,7 +183,29 @@ service cloud.firestore {
       allow delete: if isValidId(eventId);
     }
 
-    // 4. Connection check path (used on startup with getDocFromServer)
+    // 4. Board Settings (/board_settings/retencion_daily for automatic daily reset)
+    match /board_settings/{settingId} {
+      allow get: if isValidId(settingId) && (resource == null || resource.data.isPublic == true);
+      allow list: if resource.data.isPublic == true;
+
+      allow create: if isValidId(settingId)
+        && isValidBoardSetting(incoming())
+        && incoming().id == settingId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(settingId)
+        && isValidBoardSetting(incoming())
+        && incoming().id == existing().id
+        && incoming().branch == existing().branch
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['lastResetDate', 'updatedAt']);
+
+      allow delete: if false;
+    }
+
+    // 5. Connection check path (used on startup with getDocFromServer)
     match /test/connection {
       allow get: if true;
     }

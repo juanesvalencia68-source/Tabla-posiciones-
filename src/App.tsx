@@ -17,11 +17,13 @@ import {
   deleteAgentFirestore,
   resetDailyFirestore,
   resetTotalFirestore,
+  ensureRetencionDailyResetFirestore,
 } from './services/firestoreService';
 import { soundEngine } from './utils/soundEffects';
 import { SimpleLeaderboardTable } from './components/SimpleLeaderboardTable';
 import { DepositNotification, NotificationData } from './components/DepositNotification';
 import type { ResetType } from './components/ResetConfirmModal';
+import { getConversionSalesCount, CONVERSION_SALE_AMOUNT, getLocalDateKey } from './utils/formatters';
 
 import { loadAgents } from './utils/storage';
 
@@ -47,8 +49,11 @@ export default function App() {
   const agentsRef = useRef<Agent[]>(agents);
   agentsRef.current = agents;
   const hasSeededRef = useRef(false);
+  const [agentsSyncedFromFirestore, setAgentsSyncedFromFirestore] = useState(false);
+  const [todayKey, setTodayKey] = useState<string>(() => getLocalDateKey());
+  const lastDailyResetCheckRef = useRef<string>('');
 
-  const [sortBy, setSortBy] = useState<RankingView>('daily');
+  const [sortBy, setSortBy] = useState<RankingView>('total');
   const [currentView, setCurrentView] = useState<'leaderboard' | 'admin'>('leaderboard');
   const [activeNotification, setActiveNotification] = useState<NotificationData | null>(null);
   const [celebrationEvent, setCelebrationEvent] = useState<Top1OvertakeEvent | null>(null);
@@ -103,12 +108,13 @@ export default function App() {
     }
   };
 
-  // 1. Real-Time Cloud Firestore Sync (works without login on Smart TVs)
+  // 1a. Real-Time Cloud Firestore Agents Sync (works without login on Smart TVs)
   useEffect(() => {
     const unsubscribeAgents = subscribeAgentsFromFirestore(
       (firestoreAgents, count) => {
         if (count > 0) {
           setAgents(firestoreAgents);
+          setAgentsSyncedFromFirestore(true);
         }
       },
       (status) => {
@@ -116,19 +122,70 @@ export default function App() {
       }
     );
 
-    const unsubscribeEvents = subscribeLatestBoardEvent((evt) => {
+    return () => {
+      unsubscribeAgents();
+    };
+  }, []);
+
+  // Watch calendar day changes (for 24/7 Smart TVs & returning shifts)
+  useEffect(() => {
+    const checkDayChange = () => {
+      const nextKey = getLocalDateKey();
+      setTodayKey((prev) => (prev !== nextKey ? nextKey : prev));
+    };
+    const interval = setInterval(checkDayChange, 30000);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkDayChange();
+      }
+    };
+    window.addEventListener('focus', checkDayChange);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', checkDayChange);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, []);
+
+  // Automatically reset Retención daily deposits to $0 at the start of each new day
+  useEffect(() => {
+    if (!agentsSyncedFromFirestore) return;
+    if (lastDailyResetCheckRef.current === todayKey) return;
+    lastDailyResetCheckRef.current = todayKey;
+
+    void ensureRetencionDailyResetFirestore(agentsRef.current).catch((err) => {
+      console.error('Error checking daily reset for Retención:', err);
+      lastDailyResetCheckRef.current = '';
+    });
+  }, [agentsSyncedFromFirestore, todayKey]);
+
+  // 1b. Area-Isolated Real-Time Board Events (Retención and Conversión never mix)
+  useEffect(() => {
+    setActiveNotification(null);
+    setCelebrationEvent(null);
+
+    const unsubscribeEvents = subscribeLatestBoardEvent(currentArea, (evt) => {
+      const branchName: 'Retención' | 'Conversión' =
+        evt.branch === 'Conversión' ? 'Conversión' : 'Retención';
+
+      // Extra client-side guard so events from another area never mix
+      if (evt.branch !== 'Todas' && branchName !== currentArea) {
+        return;
+      }
+
       soundEngine.playCoinMoneySound();
 
       setActiveNotification({
         id: String(evt.eventSeq || Date.now()),
         agentName: evt.agentName,
         amount: evt.amount,
+        branch: branchName,
         timestamp: Date.now(),
       });
 
       if (evt.overtake && evt.type === 'deposit' && evt.amount > 0) {
         const matchedAgent = agentsRef.current.find((a) => a.id === evt.agentId);
-        const branchName = evt.branch === 'Conversión' ? 'Conversión' : 'Retención';
         const fallbackAgent: Agent = matchedAgent || {
           id: evt.agentId || 'top-1',
           name: evt.agentName,
@@ -146,18 +203,17 @@ export default function App() {
         setCelebrationEvent({
           agent: fallbackAgent,
           previousLeaderName: evt.previousLeaderName,
-          newAmount: matchedAgent ? matchedAgent.dailyTotal : evt.amount,
-          view: evt.view || 'daily',
+          newAmount: matchedAgent ? matchedAgent.grandTotal : evt.amount,
+          view: 'total',
           timestamp: Date.now(),
         });
       }
     });
 
     return () => {
-      unsubscribeAgents();
       unsubscribeEvents();
     };
-  }, []);
+  }, [currentArea]);
 
   // 2. Auto-seed Firestore on first verified Admin login if collection is empty
   useEffect(() => {
@@ -179,15 +235,20 @@ export default function App() {
     return agents.filter((a) => a.branch === currentArea);
   }, [agents, currentArea]);
 
-  // Sorted agents based on active view (daily vs total)
+  // Sorted agents based on active area (Retención always ranked by Total, Conversión by Total Ventas)
   const sortedAgents = useMemo(() => {
     return [...areaAgents].sort((a, b) => {
-      if (sortBy === 'daily') {
-        return b.dailyTotal - a.dailyTotal;
+      if (currentArea === 'Conversión') {
+        const salesDiff = getConversionSalesCount(b.grandTotal) - getConversionSalesCount(a.grandTotal);
+        if (salesDiff !== 0) return salesDiff;
+        return b.grandTotal - a.grandTotal;
       }
-      return b.grandTotal - a.grandTotal;
+      // Retención: Top 1 is always whoever has the most accumulated in Total
+      const totalDiff = b.grandTotal - a.grandTotal;
+      if (totalDiff !== 0) return totalDiff;
+      return b.dailyTotal - a.dailyTotal;
     });
-  }, [areaAgents, sortBy]);
+  }, [areaAgents, currentArea]);
 
   const top1Agent = sortedAgents[0];
 
@@ -216,17 +277,26 @@ export default function App() {
 
   // Quick simulation function to test the coin sound, notification, and celebration
   const handleSimulateDeposit = useCallback(() => {
-    if (agents.length === 0) return;
+    if (sortedAgents.length === 0) return;
 
     const candidate = sortedAgents[1] || sortedAgents[0];
-    const top1Amount = sortBy === 'daily' ? sortedAgents[0].dailyTotal : sortedAgents[0].grandTotal;
-    const candidateAmount = sortBy === 'daily' ? candidate.dailyTotal : candidate.grandTotal;
+    if (currentArea === 'Conversión') {
+      const top1Sales = getConversionSalesCount(sortedAgents[0].grandTotal);
+      const targetAmount = (top1Sales + 1) * CONVERSION_SALE_AMOUNT;
+      const needed = Math.max(CONVERSION_SALE_AMOUNT, targetAmount - candidate.grandTotal);
+      const simAmount = Math.ceil(needed / CONVERSION_SALE_AMOUNT) * CONVERSION_SALE_AMOUNT;
+      void handleConfirmDeposit(candidate.id, simAmount, 'Efectivo', 'SIM-VENTA');
+      return;
+    }
+
+    const top1Amount = sortedAgents[0].grandTotal;
+    const candidateAmount = candidate.grandTotal;
 
     const diff = Math.max(0, top1Amount - candidateAmount);
     const simAmount = diff > 0 ? diff + 100000 : 200000;
 
     void handleConfirmDeposit(candidate.id, simAmount, 'Efectivo', 'SIM-TEST');
-  }, [agents, sortedAgents, sortBy, handleConfirmDeposit]);
+  }, [sortedAgents, currentArea, handleConfirmDeposit]);
 
   const handleToggleMute = (muted: boolean) => {
     setIsMuted(muted);
@@ -254,12 +324,17 @@ export default function App() {
     try {
       await createAgentFirestore(newAgent);
       soundEngine.playCoinMoneySound();
-      setActiveNotification({
-        id: String(Date.now()),
-        agentName: `${newAgent.name} (Nuevo Agente)`,
-        amount: 0,
-        timestamp: Date.now(),
-      });
+      const agentBranch: 'Retención' | 'Conversión' =
+        newAgent.branch === 'Conversión' ? 'Conversión' : 'Retención';
+      if (agentBranch === currentArea) {
+        setActiveNotification({
+          id: String(Date.now()),
+          agentName: `${newAgent.name} (Nuevo Agente)`,
+          amount: 0,
+          branch: agentBranch,
+          timestamp: Date.now(),
+        });
+      }
     } catch (err) {
       console.error('Error adding agent to Firestore:', err);
     }
@@ -269,12 +344,17 @@ export default function App() {
     try {
       await updateAgentFirestore(updatedAgent);
       soundEngine.playCoinMoneySound();
-      setActiveNotification({
-        id: String(Date.now()),
-        agentName: `${updatedAgent.name} (Actualizado)`,
-        amount: 0,
-        timestamp: Date.now(),
-      });
+      const agentBranch: 'Retención' | 'Conversión' =
+        updatedAgent.branch === 'Conversión' ? 'Conversión' : 'Retención';
+      if (agentBranch === currentArea) {
+        setActiveNotification({
+          id: String(Date.now()),
+          agentName: `${updatedAgent.name} (Actualizado)`,
+          amount: 0,
+          branch: agentBranch,
+          timestamp: Date.now(),
+        });
+      }
     } catch (err) {
       console.error('Error updating agent in Firestore:', err);
     }
@@ -284,12 +364,17 @@ export default function App() {
     try {
       const target = agents.find((a) => a.id === agentId);
       await deleteAgentFirestore(agentId);
-      setActiveNotification({
-        id: String(Date.now()),
-        agentName: `${target?.name || 'Agente'} Eliminado`,
-        amount: 0,
-        timestamp: Date.now(),
-      });
+      const agentBranch: 'Retención' | 'Conversión' =
+        target?.branch === 'Conversión' ? 'Conversión' : 'Retención';
+      if (agentBranch === currentArea) {
+        setActiveNotification({
+          id: String(Date.now()),
+          agentName: `${target?.name || 'Agente'} Eliminado`,
+          amount: 0,
+          branch: agentBranch,
+          timestamp: Date.now(),
+        });
+      }
     } catch (err) {
       console.error('Error deleting agent in Firestore:', err);
     }
@@ -399,6 +484,12 @@ export default function App() {
                 <Crown className="w-4 h-4 text-amber-400 fill-amber-400" />
                 <span className="text-xs text-slate-300">
                   Top 1: <strong className="text-amber-300 font-bold">{top1Agent.name}</strong>
+                  {currentArea === 'Conversión' && (
+                    <span className="ml-1.5 text-emerald-300 font-mono font-bold">
+                      ({getConversionSalesCount(top1Agent.grandTotal)}{' '}
+                      {getConversionSalesCount(top1Agent.grandTotal) === 1 ? 'venta' : 'ventas'})
+                    </span>
+                  )}
                 </span>
               </div>
             )}
@@ -463,6 +554,7 @@ export default function App() {
           <div className="flex-1 flex flex-col w-full">
             <SimpleLeaderboardTable
               agents={sortedAgents}
+              area={currentArea}
               sortBy={sortBy}
               onToggleSort={handleToggleSort}
             />
