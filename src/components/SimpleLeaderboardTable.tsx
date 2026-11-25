@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
 import { Crown, ArrowDown, Play, Pause, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Agent, RankingView } from '../types';
-import { formatCurrency, getConversionSalesCount, CONVERSION_SALE_AMOUNT } from '../utils/formatters';
+import {
+  formatCurrency,
+  getConversionSalesCount,
+  CONVERSION_SALE_AMOUNT,
+  RETENCION_TARGET_AMOUNT,
+} from '../utils/formatters';
 
 interface SimpleLeaderboardTableProps {
   agents: Agent[];
@@ -9,6 +14,7 @@ interface SimpleLeaderboardTableProps {
   sortBy: RankingView;
   onToggleSort: (view: RankingView) => void;
   onSelectAgentForDeposit?: (agent: Agent) => void;
+  onReplayTargetCelebration?: () => void;
 }
 
 interface RowProps {
@@ -179,6 +185,7 @@ export const SimpleLeaderboardTable: React.FC<SimpleLeaderboardTableProps> = mem
   sortBy,
   onToggleSort,
   onSelectAgentForDeposit,
+  onReplayTargetCelebration,
 }) => {
   const isConversion = area === 'Conversión';
   const [isAutoRotating, setIsAutoRotating] = useState(true);
@@ -267,6 +274,14 @@ export const SimpleLeaderboardTable: React.FC<SimpleLeaderboardTableProps> = mem
     [agents]
   );
 
+  const targetProgressRatio = Math.max(0, Math.min(1, allAreaGrandTotal / RETENCION_TARGET_AMOUNT));
+  const targetProgressPercent = Math.min(
+    100,
+    Math.max(0, Math.round((allAreaGrandTotal / RETENCION_TARGET_AMOUNT) * 1000) / 10)
+  );
+  const targetRemaining = Math.max(0, RETENCION_TARGET_AMOUNT - allAreaGrandTotal);
+  const isTargetReached = allAreaGrandTotal >= RETENCION_TARGET_AMOUNT;
+
   // Slice displayed agents for current page within Top 10
   const displayedAgents = useMemo(() => {
     if (pageSize === 0) {
@@ -282,17 +297,17 @@ export const SimpleLeaderboardTable: React.FC<SimpleLeaderboardTableProps> = mem
     <div className="flex-1 flex flex-col w-full">
       {/* Main Full-Bleed Leaderboard Table Container */}
       <div className="flex-1 flex flex-col w-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-        {/* TV Broadcast Bar: Total Total (Retención) / Rotation Toggle (Conversión) & Page Navigation */}
-        <div className="bg-slate-950 px-4 py-2.5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm xl:text-base">
-          {/* Left: Total Total Box (Retención) or Auto-Rotation Toggle (Conversión) + Page Buttons */}
-          <div className="flex flex-wrap items-center gap-2.5">
+        {/* TV Broadcast Bar: Total Ret + Target Progress (Retención) / Rotation Toggle (Conversión) & Page Navigation */}
+        <div className="bg-slate-950 px-4 py-2.5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm xl:text-base">
+          {/* Left: Total Ret Box (Retención) or Auto-Rotation Toggle (Conversión) + Page Buttons */}
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             {!isConversion && (
               <div className="inline-flex items-center gap-3 px-4 py-1.5 rounded-xl bg-amber-500/15 border-2 border-amber-400/60 select-none">
-                <span className="text-xs sm:text-sm xl:text-base font-extrabold uppercase tracking-wider text-amber-200">
-                  Total Total
+                <span className="text-xs sm:text-sm xl:text-base font-extrabold uppercase tracking-wider text-amber-200 whitespace-nowrap">
+                  Total Ret
                 </span>
                 <span className="h-5 w-px bg-amber-400/40" aria-hidden="true" />
-                <span className="font-mono font-black tabular-nums text-lg sm:text-2xl xl:text-3xl text-amber-300 leading-none">
+                <span className="font-mono font-black tabular-nums text-lg sm:text-2xl xl:text-3xl text-amber-300 leading-none whitespace-nowrap">
                   {formatCurrency(allAreaGrandTotal)}
                 </span>
               </div>
@@ -303,7 +318,7 @@ export const SimpleLeaderboardTable: React.FC<SimpleLeaderboardTableProps> = mem
                 {isConversion && (
                   <button
                     onClick={handleToggleAutoRotate}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm xl:text-base font-bold transition-colors cursor-pointer select-none ${
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm xl:text-base font-bold transition-colors cursor-pointer select-none whitespace-nowrap ${
                       isAutoRotating
                         ? 'bg-amber-500/15 text-amber-300 border border-amber-500/40 hover:bg-amber-500/25'
                         : 'bg-slate-800 text-slate-400 border border-slate-700 hover:text-white'
@@ -342,7 +357,7 @@ export const SimpleLeaderboardTable: React.FC<SimpleLeaderboardTableProps> = mem
                       <button
                         key={idx}
                         onClick={() => handlePageSelect(idx)}
-                        className={`px-3 py-1 rounded-lg text-xs sm:text-sm xl:text-base font-bold transition-all cursor-pointer select-none font-mono ${
+                        className={`px-3 py-1 rounded-lg text-xs sm:text-sm xl:text-base font-bold transition-all cursor-pointer select-none font-mono whitespace-nowrap ${
                           isActive
                             ? 'bg-amber-500 text-slate-950'
                             : 'bg-slate-900 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700'
@@ -364,18 +379,95 @@ export const SimpleLeaderboardTable: React.FC<SimpleLeaderboardTableProps> = mem
               </>
             )}
             {isConversion && (pageSize === 0 || totalPages <= 1) && (
-              <span className="text-xs sm:text-sm xl:text-base text-amber-300 font-bold px-1">
+              <span className="text-xs sm:text-sm xl:text-base text-amber-300 font-bold px-1 whitespace-nowrap">
                 Top {top10Agents.length} Mejores Agentes
               </span>
             )}
           </div>
 
+          {/* Center (Retención only): Live Target $550.000 Progress Bar */}
+          {!isConversion && (
+            <div
+              onClick={isTargetReached && onReplayTargetCelebration ? onReplayTargetCelebration : undefined}
+              role={isTargetReached && onReplayTargetCelebration ? 'button' : undefined}
+              tabIndex={isTargetReached && onReplayTargetCelebration ? 0 : undefined}
+              onKeyDown={
+                isTargetReached && onReplayTargetCelebration
+                  ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onReplayTargetCelebration();
+                      }
+                    }
+                  : undefined
+              }
+              title={
+                isTargetReached
+                  ? '¡Meta de $ 550.000 cumplida! Haz clic para repetir la celebración'
+                  : `Progreso hacia el Target de ${formatCurrency(RETENCION_TARGET_AMOUNT)}`
+              }
+              className={`flex-1 min-w-[220px] max-w-2xl px-1 sm:px-2 flex flex-col justify-center gap-1.5 select-none ${
+                isTargetReached && onReplayTargetCelebration ? 'cursor-pointer' : ''
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2 text-xs sm:text-sm xl:text-base leading-none">
+                <span className="flex items-center gap-1.5 font-extrabold tracking-wide whitespace-nowrap">
+                  {isTargetReached && (
+                    <Crown className="w-4 h-4 sm:w-5 sm:h-5 text-amber-300 fill-amber-300 shrink-0" />
+                  )}
+                  <span className={isTargetReached ? 'text-emerald-300' : 'text-slate-200'}>
+                    {isTargetReached ? 'Target Cumplido' : 'Target'}
+                  </span>
+                  <span className="text-slate-500" aria-hidden="true">·</span>
+                  <span className="font-mono font-black text-amber-300 tabular-nums">
+                    {formatCurrency(RETENCION_TARGET_AMOUNT)}
+                  </span>
+                </span>
+
+                <span className="flex items-center gap-2 font-mono tabular-nums whitespace-nowrap">
+                  {!isTargetReached && (
+                    <span className="hidden xl:inline text-xs text-slate-400 font-semibold">
+                      Faltan {formatCurrency(targetRemaining)}
+                    </span>
+                  )}
+                  <span
+                    className={`font-black text-sm sm:text-base xl:text-lg ${
+                      isTargetReached ? 'text-emerald-300' : 'text-amber-300'
+                    }`}
+                  >
+                    {targetProgressPercent.toFixed(1).replace(/\.0$/, '')}%
+                  </span>
+                </span>
+              </div>
+
+              <div
+                className={`h-3.5 sm:h-4 w-full rounded-full bg-slate-900 overflow-hidden border ${
+                  isTargetReached ? 'border-emerald-400/70' : 'border-slate-700'
+                }`}
+                role="progressbar"
+                aria-label="Progreso del Target de Retención"
+                aria-valuenow={Math.round(targetProgressPercent)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
+                <div
+                  className={`h-full w-full origin-left transition-transform duration-700 ease-out rounded-full ${
+                    isTargetReached
+                      ? 'bg-gradient-to-r from-emerald-400 via-amber-300 to-yellow-200'
+                      : 'bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-300'
+                  }`}
+                  style={{ transform: `scaleX(${targetProgressRatio})` }}
+                />
+              </div>
+            </div>
+          )}
+
           {/* Right: Agents-per-page selector for TV customization */}
-          <div className="flex items-center gap-1.5 text-slate-400">
-            <span className="text-xs sm:text-sm text-slate-400 hidden md:inline">Por pág:</span>
+          <div className="flex items-center gap-1.5 text-slate-400 shrink-0">
+            <span className="text-xs sm:text-sm text-slate-400 hidden md:inline whitespace-nowrap">Por pág:</span>
             <button
               onClick={() => handleSetPageSize(5)}
-              className={`px-3 py-1 rounded-lg text-xs sm:text-sm xl:text-base font-bold font-mono transition-colors cursor-pointer ${
+              className={`px-3 py-1 rounded-lg text-xs sm:text-sm xl:text-base font-bold font-mono transition-colors cursor-pointer whitespace-nowrap ${
                 pageSize === 5
                   ? 'bg-sky-600 text-white'
                   : 'bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800'
@@ -386,7 +478,7 @@ export const SimpleLeaderboardTable: React.FC<SimpleLeaderboardTableProps> = mem
             </button>
             <button
               onClick={() => handleSetPageSize(0)}
-              className={`px-3 py-1 rounded-lg text-xs sm:text-sm xl:text-base font-bold transition-colors cursor-pointer ${
+              className={`px-3 py-1 rounded-lg text-xs sm:text-sm xl:text-base font-bold transition-colors cursor-pointer whitespace-nowrap ${
                 pageSize === 0 || pageSize === 10
                   ? 'bg-sky-600 text-white'
                   : 'bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800'

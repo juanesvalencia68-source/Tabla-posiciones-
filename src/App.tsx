@@ -23,12 +23,20 @@ import { soundEngine } from './utils/soundEffects';
 import { SimpleLeaderboardTable } from './components/SimpleLeaderboardTable';
 import { DepositNotification, NotificationData } from './components/DepositNotification';
 import type { ResetType } from './components/ResetConfirmModal';
-import { getConversionSalesCount, CONVERSION_SALE_AMOUNT, getLocalDateKey } from './utils/formatters';
+import {
+  getConversionSalesCount,
+  CONVERSION_SALE_AMOUNT,
+  RETENCION_TARGET_AMOUNT,
+  getLocalDateKey,
+} from './utils/formatters';
 
 import { loadAgents } from './utils/storage';
 
 const AdminPanel = lazy(() => import('./components/AdminPanel').then((m) => ({ default: m.AdminPanel })));
 const CelebrationModal = lazy(() => import('./components/CelebrationModal').then((m) => ({ default: m.CelebrationModal })));
+const TargetCelebrationModal = lazy(() =>
+  import('./components/TargetCelebrationModal').then((m) => ({ default: m.TargetCelebrationModal }))
+);
 const ResetConfirmModal = lazy(() => import('./components/ResetConfirmModal').then((m) => ({ default: m.ResetConfirmModal })));
 
 function detectInitialArea(): 'Retención' | 'Conversión' {
@@ -57,6 +65,8 @@ export default function App() {
   const [currentView, setCurrentView] = useState<'leaderboard' | 'admin'>('leaderboard');
   const [activeNotification, setActiveNotification] = useState<NotificationData | null>(null);
   const [celebrationEvent, setCelebrationEvent] = useState<Top1OvertakeEvent | null>(null);
+  const [showTargetCelebration, setShowTargetCelebration] = useState(false);
+  const prevRetencionTotalRef = useRef<number | null>(null);
   const [confirmResetType, setConfirmResetType] = useState<ResetType>(null);
   const [isMuted, setIsMuted] = useState(soundEngine.getIsMuted());
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -164,6 +174,7 @@ export default function App() {
   useEffect(() => {
     setActiveNotification(null);
     setCelebrationEvent(null);
+    setShowTargetCelebration(false);
 
     const unsubscribeEvents = subscribeLatestBoardEvent(currentArea, (evt) => {
       const branchName: 'Retención' | 'Conversión' =
@@ -226,9 +237,37 @@ export default function App() {
     }
   }, [authReady, isAdmin]);
 
-  // Department counts
+  // Department counts & Retención grand total (for $550,000 target tracking)
   const retencionCount = useMemo(() => agents.filter((a) => a.branch === 'Retención').length, [agents]);
   const conversionCount = useMemo(() => agents.filter((a) => a.branch === 'Conversión').length, [agents]);
+  const retencionGrandTotal = useMemo(
+    () =>
+      agents
+        .filter((a) => a.branch === 'Retención')
+        .reduce((sum, ag) => sum + (Number.isFinite(ag.grandTotal) ? ag.grandTotal : 0), 0),
+    [agents]
+  );
+
+  // Trigger giant crown + explosions + money rain when Total Ret crosses the $550,000 target
+  useEffect(() => {
+    if (!agentsSyncedFromFirestore) return;
+
+    if (prevRetencionTotalRef.current === null) {
+      prevRetencionTotalRef.current = retencionGrandTotal;
+      return;
+    }
+
+    const crossedTarget =
+      prevRetencionTotalRef.current < RETENCION_TARGET_AMOUNT &&
+      retencionGrandTotal >= RETENCION_TARGET_AMOUNT;
+
+    prevRetencionTotalRef.current = retencionGrandTotal;
+
+    if (crossedTarget && currentArea === 'Retención') {
+      soundEngine.playTargetReachedCelebration();
+      setShowTargetCelebration(true);
+    }
+  }, [agentsSyncedFromFirestore, retencionGrandTotal, currentArea]);
 
   // Agents filtered by current active area
   const areaAgents = useMemo(() => {
@@ -317,6 +356,11 @@ export default function App() {
 
   const handleDismissNotification = useCallback(() => setActiveNotification(null), []);
   const handleCloseCelebration = useCallback(() => setCelebrationEvent(null), []);
+  const handleCloseTargetCelebration = useCallback(() => setShowTargetCelebration(false), []);
+  const handleReplayTargetCelebration = useCallback(() => {
+    soundEngine.playTargetReachedCelebration();
+    setShowTargetCelebration(true);
+  }, []);
   const handleToggleSort = useCallback((view: RankingView) => setSortBy(view), []);
 
   // Admin Panel CRUD Handlers persisted in Cloud Firestore
@@ -557,6 +601,7 @@ export default function App() {
               area={currentArea}
               sortBy={sortBy}
               onToggleSort={handleToggleSort}
+              onReplayTargetCelebration={handleReplayTargetCelebration}
             />
           </div>
         ) : (
@@ -596,6 +641,17 @@ export default function App() {
           <CelebrationModal
             event={celebrationEvent}
             onClose={handleCloseCelebration}
+          />
+        </Suspense>
+      )}
+
+      {/* Giant Crown + Explosions + Money Rain Modal when Retención reaches $550,000 Target */}
+      {showTargetCelebration && (
+        <Suspense fallback={null}>
+          <TargetCelebrationModal
+            totalAmount={retencionGrandTotal}
+            targetAmount={RETENCION_TARGET_AMOUNT}
+            onClose={handleCloseTargetCelebration}
           />
         </Suspense>
       )}

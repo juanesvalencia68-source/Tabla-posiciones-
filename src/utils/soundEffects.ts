@@ -206,6 +206,18 @@ class SoundEngine {
       console.warn('Fanfare playback error:', e);
     }
   }
+
+  /**
+   * Grand celebration sound when Retención reaches the $550,000 target:
+   * triumphant fanfare followed by a celebratory coin cascade.
+   */
+  public playTargetReachedCelebration() {
+    if (this.isMuted) return;
+    this.playTop1Fanfare();
+    setTimeout(() => this.playCoinMoneySound(), 550);
+    setTimeout(() => this.playCoinMoneySound(), 1150);
+    setTimeout(() => this.playTop1Fanfare(), 1650);
+  }
 }
 
 export const soundEngine = new SoundEngine();

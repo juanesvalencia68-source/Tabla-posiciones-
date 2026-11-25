@@ -3,6 +3,7 @@
  */
 
 export const CONVERSION_SALE_AMOUNT = 250;
+export const RETENCION_TARGET_AMOUNT = 550000;
 
 export function getConversionSalesCount(totalAmount: number): number {
   if (!Number.isFinite(totalAmount) || totalAmount < CONVERSION_SALE_AMOUNT) {

@@ -123,6 +123,108 @@ html, body {
   will-change: transform;
 }
 
+/* Target Reached Celebration Animations (100% GPU compositor-only) */
+@keyframes progress-countdown-10s {
+  0% {
+    transform: scaleX(1);
+  }
+  100% {
+    transform: scaleX(0);
+  }
+}
+
+.animate-countdown-10s {
+  transform-origin: left center;
+  animation: progress-countdown-10s 10s linear forwards;
+  will-change: transform;
+}
+
+@keyframes giant-crown-entrance {
+  0% {
+    opacity: 0;
+    transform: scale(0.25) rotate(-14deg);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.14) rotate(4deg);
+  }
+  78% {
+    transform: scale(0.96) rotate(-2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes giant-crown-float {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(0, -10px, 0) scale(1.04);
+  }
+}
+
+.animate-giant-crown {
+  animation:
+    giant-crown-entrance 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards,
+    giant-crown-float 2.4s ease-in-out 0.7s infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes explosion-ring-burst {
+  0% {
+    opacity: 0.95;
+    transform: scale(0.2);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.8);
+  }
+}
+
+.animate-explosion-ring {
+  animation: explosion-ring-burst 1.6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes crown-rays-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-crown-rays {
+  animation: crown-rays-spin 16s linear infinite;
+  will-change: transform;
+}
+
+@keyframes money-rain-fall {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -12vh, 0) rotate(0deg);
+  }
+  8% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--sway, 36px), 112vh, 0) rotate(var(--spin, 360deg));
+  }
+}
+
+.animate-money-rain {
+  animation: money-rain-fall var(--fall-dur, 4s) linear var(--fall-delay, 0s) infinite;
+  will-change: transform, opacity;
+}
+
 /* TV remote D-Pad navigation highlight */
 :focus-visible {
   outline: 2px solid #F59E0B !important;
